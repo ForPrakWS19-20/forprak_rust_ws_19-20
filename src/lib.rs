@@ -301,7 +301,7 @@ impl RTree{
             let top_right:Point = insert_rect.top_right;
 
             if tmp_node.leaf{
-                ///TODO///  
+                ///TODO///
             } else {
                 let mut area: f64 = (top_right.y - botton_left.y) *
                     (top_right.x - botton_left.x) as f64;
