@@ -29,26 +29,29 @@ pub struct Block{
 pub struct RTree{
     root_id:usize,
     bfa: BFA,
-    dimension:usize
+    dimension:usize,
+    total_id: usize
 }
 
-/*enum Node{
+enum Node{
     Leaf{
-        mbr:Rect,
-        child: block
+        mbr:MBRect,
+        child: block,
+        index_zeige:usize
     },
     InnerNode{
-        mbrs: Vec<Rect>,
+        id:usize,
+        mbr: MBRect,
         children: Vec<Node>
-    }
-}*/
+    },
+}
 
-pub struct Node {
+/*pub struct Node {
     leaf: bool,
     content: Vec<usize>,
     rect: MBRect,
     id: usize
-}
+}*/
 
 pub struct Point{
     //Pos 0: x, Pos 1: y
@@ -71,21 +74,36 @@ impl Point{
 
 impl MBRect{
     pub fn new(bl:Point, tp:Point, id:usize) -> Self{
-        Rect(id,bl,tp)
+        MBRect(id,bl,tp)
     }
 
-    fn mbr_of(p1:Point, p2:Point, id:usize) -> Rect{
-        let min_x = bl(p1.coor[0], p2.coor[0]);
-        let min_y = bl(p1.coor[1], p2.coor[1]);
-        let max_x = tp(p1.coor[0], p2.coor[0]);
-        let max_y = tp(p1.coor[1], p2.coor[1]);
+    fn mbr_of(p1:Point, p2:Point, id:usize) -> MBRect{
+        let min_x = min(p1.coor[0], p2.coor[0]);
+        let min_y = min(p1.coor[1], p2.coor[1]);
+        let max_x = max(p1.coor[0], p2.coor[0]);
+        let max_y = max(p1.coor[1], p2.coor[1]);
         let min: Point = Point::new(min_x,min_y);
         let max: Point = Point::new(max_x,max_y);
-        let rect: Rect = Rect::new(min,max,id);
+        let rect: MBRect = MBRect::new(min,max,id);
         rect
     }
 
-    fn overlap(&self, other:Rect) -> bool {
+    fn mbr_of_rects(r1:&MBRect, r2:&MBRect, id:usize) -> MBRect{
+        let p1 = &r1.top_right;
+        let p2 = &r1.botton_left;
+        let p3 = &r2.top_right;
+        let p4 = &r2.botton_left;
+        let min_x = min(p2.coor[0], p4.coor[0]);
+        let min_y = min(p2.coor[1], p4.coor[1]);
+        let max_x = max(p1.coor[0], p3.coor[0]);
+        let max_y = max(p1.coor[1], p3.coor[1]);
+        let min: Point = Point::new(min_x,min_y);
+        let max: Point = Point::new(max_x,max_y);
+        let rect: MBRect = MBRect::new(min,max,id);
+        rect
+    }
+
+    fn overlap(&self, other:MBRect) -> bool {
         return !((self.max.coor.get(1) < other.min.coor.get(1))
             || (other.max.coor.get(1) < self.min.coor.get(1))
             ||(self.max.coor.get(0) < other.min.coor.get(0))
@@ -94,7 +112,18 @@ impl MBRect{
 }
 
 impl Node{
-    pub fn new(leaf: bool, content: Vec<usize>,  MBRect:Rect, id:usize) -> Self{
+
+    pub fn rect(&self) -> MBRect{
+
+        match node{
+
+            Node::Leaf {mbr, child, index_zeige} => mbr,
+            Node::InnerNode { id, mbr, children } => mbr,
+
+        }
+    }
+
+    pub fn new(leaf: bool, content: Vec<usize>,  MBRect:MBRect, id:usize) -> Self{
         Node{leaf, content, rect,id}
     }
 
@@ -105,10 +134,17 @@ impl Node{
 }
 
 impl RTree{
-    fn new(mut bfa: BFA) -> Self{
+    fn new(mut bfa: BFA, total_id: usize) -> Self{
         let root_id = bfa.get_root();
         let dimension: usize = 2;
-        RTree{root_id, bfa, dimension}
+        RTree{root_id, bfa, dimension, total_id}
+    }
+
+    pub fn node_is_leaf(&mut self, node: &Node) -> bool{
+        match node {
+            Node::Leaf => true,
+            Node::InnerNode => false,
+        }
     }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -125,10 +161,10 @@ impl RTree{
         let root_id  = self.root_id;
         let mut block = self.bfa.get(root);
         let root_node = Node::from_block(& mut block);
-        if !root_node.leaf{
+        if !self.is_leaf(&root_node){
             //如果root不是leaf
             //判断root的rect是否与要寻的rect有交集
-            let rect_root = root_node.rect;
+            let rect_root = root_node.rect();
             if rect.overlap(rect_root){
                 //若有交集
                 let mut erg: Vec<usize> = Vec::new();
@@ -139,7 +175,7 @@ impl RTree{
                     let tmp_node = Node::from_block(&mut tmp_block);
                     let tmp_id = tmp_node.id;
                     let mut tmp_gruppe: Vec<usize> = Vec::new();
-                    if !tmp_node.leaf{
+                    if !self.is_leaf(&tmp_node){
                         tmp_gruppe = self.search_overlap_gruppe(&rect,tmp_id);
                     }
                     //第一层root 判定是否为leaf
@@ -167,7 +203,7 @@ impl RTree{
             }
         } else{
             //如果root是leaf
-            let rect_leaf = root_node.rect;
+            let rect_leaf = root_node.rect();
             //判断leaf的rect是否与要寻的rect有交集
             return if rect.overlap(rect_leaf){
                 Some(block.contents as Vec<usize>)
@@ -183,14 +219,14 @@ impl RTree{
     fn search_overlap_gruppe(&mut self, rect: &MBRect, tmp:usize) -> Vec<usize>{
         let mut tmp_block = self.bfa.get(tmp);
         let tmp_node = Node::from_block(& mut tmp_block);
-        if !tmp_node.leaf{
+        if !self.is_leaf(&tmp_node){
             let children = tmp_block.contents;
             let mut overlapped:Vec<usize> = Vec::new();
             for i in 0..children.len()-1{
                 let mut child = children[i] as usize  ;
                 let mut child_block = self.bfa.get(child);
                 let mut child_node = Node::from_block(& mut child_block);
-                let mut child_rect = child_node.rect;
+                let mut child_rect = child_node.rect();
                 if rect.overlap(child_rect) {
                     let child_id = child_node.id;
                     overlapped.push(child_id);
@@ -208,13 +244,13 @@ impl RTree{
         for i in 0..tmp.len()-1{
             let mut tmp_block = self.bfa.get(i);
             let tmp_node = Node::from_block(& mut tmp_block);
-            if !tmp_node.leaf{
+            if !self.is_leaf(&tmp_node){
                 let children = tmp_block.contents;
                 for i in 0..children.len()-1{
                     let mut child = children[i] as usize  ;
                     let mut child_block = self.bfa.get(child);
                     let mut child_node = Node::from_block(& mut child_block);
-                    let mut child_rect = child_node.rect;
+                    let mut child_rect = child_node.rect();
                     if rect.overlap(child_rect) {
                         let child_id= child_node.id;
                         overlapped.push(child_id);
@@ -231,8 +267,8 @@ impl RTree{
         let mut tmp_block = self.bfa.get(tmp);
         let tmp_node = Node::from_block(& mut tmp_block);
         let mut erg: Vec<usize> = Vec::new();
-        if tmp_node.leaf{
-            let rect_leaf = tmp_node.rect;
+        if self.is_leaf(&tmp_node){
+            let rect_leaf = tmp_node.rect();
             if rect.overlap(rect_leaf){
                 erg = tmp.block.contents as Vec<usize>;
             }
@@ -243,11 +279,11 @@ impl RTree{
 
 ////////////////////////////////////////////////////////////////////////////////
     //Hilfsfunktion fuer choose_leaf und choose_leaves
-    fn add_area(&mut self, small_rect: MBRect, big_rect: MBRect) -> f64{
-        let sbl = small_rect.botton_left;
-        let str = small_rect.top_right;
-        let bbl = big_rect.botton_left;
-        let btr = big_rect.top_right;
+    fn add_area(&mut self, small_rect: &MBRect, big_rect: &MBRect) -> f64{
+        let sbl = &small_rect.botton_left;
+        let str = &small_rect.top_right;
+        let bbl = &big_rect.botton_left;
+        let btr = &big_rect.top_right;
         let area =  (btr.y - bbl.y) * (btr.x - bbl.x);
         let mut add_area: f64 = 0 as f64;
         if sbl >= bbl && str <= btr{ }
@@ -263,62 +299,176 @@ impl RTree{
     }
 
     //Hilfsfunktion fuer insert
-    fn choose_leaf(&mut self, & insert_rect:MBRect) -> Vec<usize> {
+    fn choose_leaf(&mut self, insert_rect:&MBRect) -> Vec<usize> {
         let root_id  = self.root_id;
         let mut block = self.bfa.get(root);
         let root_node = Node::from_block(& mut block);
-        let botton_left:Point = insert_rect.botton_left;
-        let top_right:Point = insert_rect.top_right;
+        let botton_left = &insert_rect.botton_left;
+        let top_right = &insert_rect.top_right;
         //es kann sein, dass ein Rect mit zwei Rect mit gleichem add_area ueberlappt
         let mut child_id: Vec<usize> = Vec::new();
-        if root_node.leaf {
+        //如果root是leaf 则返还root
+        if self.is_leaf(&root_node) {
             child_id.push(root_id);
-        } else {
+        } else {//root不是leaf
+            //选择root的子节点，使得将新的点加入该子节点中，子节点增加的面积最少
             let mut area: f64 = (top_right.y - botton_left.y) *
                 (top_right.x - botton_left.x) as f64;
             for i in 0..root_node.content.len()-1 {
                 let mut tmp_block = self.bfa.get(i);
                 let tmp_node = Node::from_block(& mut tmp_block);
-                let tmp_rect = tmp_node.rect;
+                let tmp_rect = tmp_node.rect();
                 let tmp_id = tmp_node.id;
-                let tmp_area = self.add_area(insert_rect, tmp_rect);
+                let tmp_area = self.add_area(insert_rect, &tmp_rect);
                 if tmp_area <= area {
                     area = tmp_area;
                     child_id.push(tmp_id);
                 }
             }
+            //但是！可能同时有多个子节点符合这个筛选条件
+            //那么当child id的第一个不为leaf时 向下迭代遍历子节点
+            while !self.is_leaf(&Node::from_block(&mut self.bfa.get(child_id[0]))){
+                let mut child_child_id:Vec<usize> = Vec::new();
+                for i in 0..child_id.len()-1{
+                    child_child_id.push(child_id[0]);
+                }
+                child_id = self.choose_leaves(insert_rect,child_child_id);
+            }
+
         }
         child_id
     }
 
     //Hilfsfunktion fuer insert
-    fn choose_leaves(&mut self, & insert_rect:MBRect, nodes_id: Vec<usize>) -> Vec<usize> {
+    fn choose_leaves(&mut self, insert_rect: &MBRect, nodes_id: Vec<usize>) -> Vec<usize> {
         let mut child_id: Vec<usize> = Vec::new();
         for i in nodes_id.len()-1{
             let mut tmp_block = self.bfa.get(nodes_id[i]);
             let tmp_node = Node::from_block(& mut tmp_block);
-            let botton_left:Point = insert_rect.botton_left;
-            let top_right:Point = insert_rect.top_right;
+            let botton_left = &insert_rect.botton_left;
+            let top_right = &insert_rect.top_right;
 
-            if tmp_node.leaf{
-                ///TODO///
-            } else {
-                let mut area: f64 = (top_right.y - botton_left.y) *
-                    (top_right.x - botton_left.x) as f64;
-                for i in 0..tmp_node.content.len()-1 {
-                    let mut tmp_block2 = self.bfa.get(i);
-                    let tmp_node2 = Node::from_block(& mut tmp_block2);
-                    let tmp_rect = tmp_node2.rect;
-                    let tmp_id = tmp_node.id;
-                    let tmp_area = self.add_area(insert_rect, tmp_rect);
-                    if tmp_area <= area {
-                        area = tmp_area;
-                        child_id.push(tmp_id);
-                    }
+
+            let mut area: f64 = (top_right.y - botton_left.y) *
+                (top_right.x - botton_left.x) as f64;
+            for i in 0..tmp_node.content.len()-1 {
+                let mut tmp_block2 = self.bfa.get(i);
+                let tmp_node2 = Node::from_block(& mut tmp_block2);
+                let tmp_rect = tmp_node2.rect();
+                let tmp_id = tmp_node.id;
+                let tmp_area = self.add_area(insert_rect, &tmp_rect);
+                if tmp_area <= area {
+                    area = tmp_area;
+                    child_id.push(tmp_id);
+                }
+            }
+
+        }
+        child_id
+    }
+
+    //acsend from a leaf node with id to the root
+    // adjusting covering rectangles
+    fn adjust_tree(& mut self, id: usize){
+        let mut block = self.bfa.get(id);
+        let node = Node::from_block(& mut block);
+        //check if done， stop
+        if id == self.root_id{
+
+        } else {//adjust covering rectangle in parent entry
+            //wie bekommt man parent node?
+            //TODO/////
+
+        }
+
+    }
+
+    //add a new entry to a full node with M children
+    //divide the collection of M+1 entries between two nodes
+    //linear cost algorithm
+    //在M+1个entries中选择2个作为两个新组的第一个elem
+    //如何选择这两个entries？
+    //选择浪费最大面积的一组 如果他们被放在了相同的组那最棒了
+    //覆盖两个entries的矩形面积减去他们各自的矩形的面积
+    //剩余entries将按次分配到一组
+    //每次都会计算将剩余entries添加到组所需的面积扩展
+    //分配的entry展示了两组间最大的差
+    
+    fn split(& mut self, id: usize){
+        let mut assigned_1: Vec<&usize> = Vec::new();
+        let mut assigned_2: Vec<&usize> = Vec::new();
+        //S1: pick first entry for each group, PickSeeds
+        let first_one = self.pick_seeds().get(0).unwrap();
+        assigned_1.push(first_one);
+        let first_two = self.pick_seeds().get(1).unwrap();
+        assigned_2.push(first_two);
+        //S2: check if done
+
+        //S3: select entry to assign, PickNext, repeat S2
+
+
+    }
+
+    //12 13 14 15 16 23 24 25 26
+    //Hilfsfkt fuer split
+    //select two entries to be the first elements of the groups
+    fn pick_seeds(&mut self) -> Vec<usize>{
+        let mut res:Vec<usize> = Vec::new();
+        let mut e1 =0 as usize;
+        let mut e2 = 0 as usize;
+        let mut largest_d = 0 as f64;
+        let root = self.root_id;
+        for i in 1..self.total_id{
+            let tmp_node_1 = Node::from_block(&mut self.bfa.get(i));
+            let tmp_rect_1 = tmp_node_1.rect();
+            let area_e1=(tmp_rect_1.top_right.y-tmp_rect_1.botton_left.y) *
+                (tmp_rect_1.top_right.x-tmp_rect_1.botton_left.x);
+            for j in i+1..self.total_id{
+                let tmp_node_2 = Node::from_block(&mut self.bfa.get(j));
+                let tmp_rect_2 = tmp_node_2.rect();
+                let area_e2=(tmp_rect_2.top_right.y-tmp_rect_2.botton_left.y) *
+                    (tmp_rect_2.top_right.x-tmp_rect_2.botton_left.x);
+                let rect_mbr = MBRect::mbr_of_rects(&tmp_rect_1, &tmp_rect_2,self.total_id+1);
+                let area_mbr = (rect_mbr.top_right.y - rect_mbr.botton_left.y)*
+                    (rect_mbr.top_right.x - rect_mbr.botton_left.x);
+                let area_waste = area_mbr - area_e1 - area_e2;
+                if area_waste > largest_d {
+                    largest_d = area_waste;
+                    e1 = i;
+                    e2 = j;
                 }
             }
         }
-        child_id
+        res.push(e1);
+        res.push(e2);
+        res
+    }
+
+    //Hilfsfkt fuer split
+    //select one remaining entry for classification in a group
+    fn pick_next(&mut self, assigned: Vec<usize>, rect1: &MBRect, rect2: &MBRect) -> usize{
+        let mut d1: f64 = 0 as f64;
+        let mut d2: f64 = 0 as f64;
+        let mut max_d: f64 = 0 as f64;
+        let mut pref: usize = 0 as usize;
+
+        for i in 0..self.total_id-1{
+            let mut tmp_block = self.bfa.get(i);
+            let tmp_node = Node::from_block(& mut tmp_block);
+            let tmp_rect = tmp_node.rect();
+            //for each entry not yet in a group
+
+            if !assigned.contains(&i) {
+                //calculate the area increase required in the covering rectangle of group1
+                //and of group 2
+                d1 = self.add_area(&tmp_rect, rect1);
+                d2 = self.add_area(&tmp_rect, rect2);
+                if d2 > d1 && d2 - d1 > max_d {max_d = d2 - d1; pref = i;}
+                else if d1 <= d2 && d1 - d2 > max_d {max_d = d1 - d2; pref = i;}
+            }
+        }
+
+        pref
     }
 
 
@@ -333,6 +483,7 @@ use serde::{Serialize, Deserialize};
 use bincode::{serialize, deserialize};
 use core::borrow::Borrow;
 use std::cmp::{min, max};
+use std::intrinsics::breakpoint;
 
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
