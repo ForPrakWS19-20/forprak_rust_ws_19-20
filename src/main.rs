@@ -2,7 +2,7 @@ use miniBFA::{BFA, Student};
 
 use std::fs::File;
 use std::io::Write;
-use Foprak::{Student, BFA};
+use foprak::{Student, BFA};
 
 
 fn main() {
