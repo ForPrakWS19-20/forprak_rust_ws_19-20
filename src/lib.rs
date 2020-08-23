@@ -54,7 +54,6 @@ pub struct LeafElement {
 }
 
 pub struct InnerElement {
-    id: usize,
     //MBRect von Kinder
     mbrs:Vec<MBRect>,
     //ID, mit welcher Blöcke vom BFA geholt werden können
@@ -283,35 +282,42 @@ impl RTree{
     }
 /////////////////////////////////////////////////////////////////////////////////////////
 
-    fn search_overlap_innernode(&mut self, rect: &MBRect, tmp: usize) -> Vec<usize>{
+    fn search_overlap_innernode(&mut self, rect: &MBRect, tmp: usize, mut overlapped: Vec<usize>) -> Option<Vec<usize>>{
         let mut tmp_node = self.get_node(tmp);
-        let mut overlapped:Vec<usize> = Vec::new();
         match tmp_node {
-            Node::Leaf {content} => {}
-            Node::InnerNode {content} => {
-                for i in 0..content.len()-1 {
-                    let element = content.get(i).unwrap();
-                    for j in element.mbrs {
+            Node::Leaf { content } => { None }
+            Node::InnerNode { content } => {
+                for i in tmp_node.get_innernode_content().unwrap() {
+                    let mut status = false;
+                    for j in i.mbrs {
                         if rect.overlap(&j) {
-                            overlapped.push(element.children);
+                            let children_node = self.get_node(i.children);
+                            match children_node {
+                                Node::Leaf { content } => { overlapped.push(i.children) }
+                                Node::InnerNode { content } => {
+                                    return self.search_overlap_innernode(rect, i.children, overlapped);
+                                }
+                            }
                         }
                     }
                 }
+                if overlapped.len() != 0 {
+                    Some(overlapped)
+                }
+                else { None } // when status = false, nothing adds to overlapped, return none instead of Some(empty vec)
             }
         }
-        overlapped
     }
 
     fn search_overlap_leafnode(&mut self, rect: &MBRect, tmp: usize) -> Option<Vec<Point>>{
         let mut tmp_node = self.get_node(tmp);
         let mut res: Vec<Point> = Vec::new();
         match tmp_node {
-            Node::InnerNode {content} => {}
+            Node::InnerNode {content} => {None}
             Node::Leaf {content} => {
-                for i in 0..content.len()-1 {
-                    let mut element = content.get(i).unwrap();
-                    if rect.overlap(&element.mbr) {
-                        for j in element.daten {
+                for i in tmp_node.get_leaf_content().unwrap() {
+                    if rect.overlap(&i.mbr) {
+                        for j in i.daten {
                             res.push(j);
                         }
                     }
@@ -334,7 +340,15 @@ impl RTree{
             }
             //Node ist InnerNode
             Node::InnerNode {content} => {
-                let mut tmp = root_id;
+                let overlapped = self.search_overlap_innernode(rect,root_id,Vec::new()).unwrap();
+                let mut res: Vec<Point> = Vec::new();
+                for i in overlapped {
+                    let point = self.search_overlap_leafnode(rect,i).unwrap();
+                    for j in point {
+                        res.push(j);
+                    }
+                }
+                /*let mut tmp = root_id;
                 let mut tmp_node = self.get_node(tmp);
                 //search tmp node children, if they with rect overlap
                 //next: overlapped children of tmp node
@@ -363,7 +377,7 @@ impl RTree{
                     }
                     res.append(&mut data.unwrap());
                 }
-                Some(res)
+                Some(res)*/
             }
         }
     }
