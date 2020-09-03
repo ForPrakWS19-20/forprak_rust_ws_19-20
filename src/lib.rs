@@ -335,71 +335,65 @@ impl RTree{
                         res.push(j);
                     }
                 }
-                /*let mut tmp = root_id;
-                let mut tmp_node = self.get_node(tmp);
-                //search tmp node children, if they with rect overlap
-                //next: overlapped children of tmp node
-                let mut next = self.search_overlap_innernode(rect,tmp);
-                //tmp node is InnerNode
-                while !self.node_is_leaf(&tmp_node) {
-                    //Da alle Kinderbäume stehen in gleicher Etage, das heißt, wenn der erste Kinderbaum ein Blatt ist, sind alle.
-                    tmp = *next.get(0).unwrap();
-                    tmp_node = self.get_node(tmp);
-                    let mut next_next = self.search_overlap_innernode(rect,tmp);
-                    //Lege die neue bekommene Enkelkinderbäume am Ende des Vectors von Kinderbäume
-                    next.append(&mut next_next);
-                    //Entferne den erste Kinderbaum und gehe immer weiter
-                    next.remove(0);
-
-                }
-                let mut res: Vec<Point> = Vec::new();
-                for i in next {
-                    //直至子树集中第一个子树为叶子 应该只剩一个
-                    //overlap_children里应该储存通过search_overlap_gruppe得到的id
-                    let mut data = self.search_overlap_leafnode(rect,i);
-                    //TODO match data is Some/None, bin nicht sicher
-                    match data {
-                        None => (),
-                        Some(i) => i
-                    }
-                    res.append(&mut data.unwrap());
-                }
-                Some(res)*/
             }
         }
     }
-
-
 
 
     ////////////////////////////////////////////////////////////////////////////////
     //insert a new node into RTree
 
     fn insert(&mut self, insert_rect: MBRect){
-        let pos = self.choose_leaf(self.root_id,&insert_rect);
-        let mut chosen_block = self.bfa.get(pos);
-        let chosen_node = Node::from_block(&mut chosen_block);
-        let child_num = chosen_node.children().unwrap().len();
+        let parent: Vec<usize> = Vec::new();
+        let leaf_id = self.choose_leaf(self.root_id,&insert_rect,&parent).0;
+        let id_ancestry = self.choose_leaf(self.root_id,&insert_rect,&parent).1;
+        let mut leaf_node = self.get_node(leaf_id);
+        let mut leaf_elem_num = leaf_node.get_innernode_content().unwrap().len();
 
-        if child_num < self.M {
-            let new_id = self.total_id + 1;
-            chosen_node.children().unwrap().push(new_id);
-            //TODO was in content eig?
-            //let content =
-            //TODO///////////////
-            let new_node_element = LeafElement::new(vec![],mbr);
-            let mut new_elem = Vec::new();
-            new_elem.push(new_node_element);
-            let new_node = Node::Leaf { content: new_elem};
-            let new_block = Node::to_block(& new_node);
-            self.bfa.update(new_id,new_block);
+        self.add_rect_in_leaf(leaf_id,insert_rect);
+        if leaf_elem_num <= self.M {
+            let block = Node::to_block(&leaf_node);
+            self.adjust_tree(leaf_id, id_ancestry, -1);
+            self.bfa.update(leaf_id,block);
         }
         else {
-            //TODO hinzufügen fkt hier oder in split
-            self.split(tmp_id);
-            //involke AdjustTree if split was performed
-            //self.adjust_tree(tmp_id);
+            let LL = self.split(leaf_id).2;
+            self.adjust_tree(leaf_id,id_ancestry,LL.children)
         }
+
+        let mut root_node = self.get_node(self.root_id);
+        match root_node {
+            Node::InnerNode {mut content} => {
+                if root_node.get_innernode_content().unwrap().len() > self.M {
+                    let mut N = self.split(self.root_id).0.get(0).unwrap();
+                    let mut NN = self.split(self.root_id).0.get(1).unwrap();
+                    let mut EN = self.split(self.root_id).1;
+                    let mut ENN = self.split(self.root_id).2;
+                    &content = N.get_innernode_content().unwrap();
+
+                    let mut new_root = Node::InnerNode;
+                    new_root.set_innernode_content(vec![EN,ENN]);
+                }
+            }
+            Node::Leaf {mut content} => {
+                if root_node.get_leaf_content().unwrap().len() > self.M {
+                    let mut N = self.split(self.root_id).0.get(0).unwrap();
+                    let mut NN = self.split(self.root_id).0.get(1).unwrap();
+                    let mut EN = self.split(self.root_id).1;
+                    let mut ENN = self.split(self.root_id).2;
+                    &content = N.get_leaf_content().unwrap();
+
+                    let mut new_root = Node::InnerNode ;
+                    new_root.set_innernode_content(vec![EN,ENN]);
+                }
+            }
+        }
+    }
+
+    fn add_rect_in_leaf(&mut self,leaf_id:usize,rect:MBRect) {
+        let mut leaf_node = self.get_node(leaf_id);
+        let new_leaf = LeafElement{ daten: vec![], mbr: rect };
+        leaf_node.get_leaf_content().unwrap().push(new_leaf);
     }
 
 
@@ -415,7 +409,7 @@ impl RTree{
     //TODO
     //Hilfsfunktion fuer insert
     //Find position for new record
-    fn choose_leaf(&mut self, tmp: usize, insert_rect:&MBRect) -> usize {
+    fn choose_leaf(&mut self, tmp: usize, insert_rect:&MBRect, mut parent: &Vec<usize>) -> (usize, &Vec<usize>) {
         let mut tmp_node = self.get_node(tmp);
         if !self.node_is_leaf(&tmp_node) {
             let mut min_add_area:f64 = 0 as f64;
@@ -434,9 +428,12 @@ impl RTree{
                         min_node_area = i_mbr.rect_area();
                     }
                  } }
-            self.choose_leaf(min_node_id,insert_rect);
+            self.choose_leaf(min_node_id,insert_rect,parent)
         }
-        return tmp;
+        else {
+            parent.push(tmp);
+            return (tmp,parent);
+        }
     }
 
 
@@ -456,7 +453,7 @@ impl RTree{
 
     //acsend from a leaf node with id to the root
     // adjusting covering rectangles
-    fn adjust_tree(& mut self, id: usize, mut id_ancestry: Vec<usize>, split: usize){
+    fn adjust_tree(& mut self, id: usize, mut id_ancestry: &Vec<usize>, split: usize){
         let mut id_node = self.get_node(id);
         let mut parent = id_ancestry.pop().unwrap();
         let mut parent_node = self.get_node(parent);
@@ -544,9 +541,8 @@ impl RTree{
                 let mut group_2_node = Node::InnerNode { content: vec![] };
                 for i in *group_1_index {
                     let elem = content.get(i).unwrap();
-                    let a = **elem;
                     group_1_mbr.push(self.get_inner_element_mbr(elem));
-                    //group_1_node.get_innernode_content().unwrap().push(*elem);
+                    //group_1_node.get_innernode_content().unwrap().push(elem);
                 }
                 for i in *group_2_index {
                     let elem = content.get(i).unwrap();
@@ -728,6 +724,7 @@ use std::intrinsics::{breakpoint, ceilf64};
 use std::panic::resume_unwind;
 use crate::Node::{InnerNode, Leaf};
 use std::ops::BitAnd;
+use std::slice::SliceIndex;
 
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
