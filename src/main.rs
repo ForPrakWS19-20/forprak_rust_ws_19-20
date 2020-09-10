@@ -1,13 +1,14 @@
-use miniBFA::{BFA, Student};
+
 
 use std::fs::File;
 use std::io::Write;
-use foprak::{Student, BFA};
+use Foprak::{Student, BFA};
 
 
 fn main() {
     //file_bfa();
     student_block();
+
 
 }
 

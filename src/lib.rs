@@ -35,32 +35,27 @@ pub struct RTree{
 }
 
 
-
-enum Node{
+#[derive(Debug, Deserialize, Serialize,Clone)]
+pub enum Node{
     //mittels von der id aus inneren Knoten das Blatt(als Block) ausholen
     //dann zum Blatt serialisieren
     Leaf{
-        content: Vec<LeafElement>
+        content: Vec<Point>
+        //id
     },
     InnerNode{
         content: Vec<InnerElement>
     },
 }
 
-
-pub struct LeafElement {
-    daten:Vec<Point>,
-    mbr:MBRect
-}
-
+#[derive(Debug, Deserialize, Serialize,Clone,Copy)]
 pub struct InnerElement {
-    //MBRect von Kinder
-    mbrs:Vec<MBRect>,
+    mbr:MBRect,
     //ID, mit welcher Blöcke vom BFA geholt werden können
     children:usize
 }
 
-
+#[derive(Debug, Deserialize, Serialize,Clone,Copy)]
 pub struct Point{
     //Pos 0: x, Pos 1: y
     //coor:Vec<f64>
@@ -68,6 +63,7 @@ pub struct Point{
     y:f64
 }
 
+#[derive(Debug, Deserialize, Serialize,Clone,Copy)]
 pub struct MBRect{
     id: usize,
     botton_left:Point,
@@ -92,7 +88,7 @@ impl Node{
         }
     }
 
-    pub fn get_leaf_content(& self) -> Option<& Vec<LeafElement>> {
+    pub fn get_leaf_content(&mut self) -> Option<&mut Vec<Point>> {
         match self {
             Node::Leaf {content} => {
                 Some(content)
@@ -112,7 +108,7 @@ impl Node{
         }
     }
 
-    pub fn set_leaf_content(&mut self, new_content: Vec<LeafElement>){
+    pub fn set_leaf_content(&mut self, new_content: Vec<Point>){
         match self {
             Node::Leaf {content} => {
                 *content = new_content
@@ -134,32 +130,47 @@ impl Node{
 }
 
 impl InnerElement{
-    pub fn new(mbr: Vec<MBRect>,children: usize) -> Self {
-        InnerElement(mbr,children)
+    pub fn new(mbr: MBRect,children: usize) -> Self {
+        InnerElement{ mbr, children }
     }
 
-    pub fn set_mbrs(&mut self, mbrs: Vec<MBRect>) {
-        self.mbrs = mbrs;
+    pub fn set_mbr(&mut self, mbr:MBRect) {
+        self.mbr = mbr;
+    }
+
+    pub fn equal(&self, other:&InnerElement) -> bool {
+        return self.children == other.children && self.mbr.equal(&other.mbr)
     }
 }
 
+/*
 impl LeafElement{
     pub fn new(daten: Vec<Point>,mbr: MBRect) -> Self {
-        LeafElement(daten,mbr)
+        LeafElement{daten,mbr}
     }
 }
+
+ */
 
 impl Point{
     pub fn new(x:f64, y:f64) -> Self{
-        Point(x,y)
+        Point {x,y}
+    }
+
+    pub fn equal(&self,other:&Point) -> bool {
+        return self.x == other.x && self.y == other.y
     }
 }
 
 impl MBRect{
     pub fn new(bl:Point, tp:Point, id:usize) -> Self{
-        MBRect(id,bl,tp)
+        MBRect{id, botton_left: bl, top_right: tp }
     }
 
+    pub fn equal (&self, other:&MBRect) -> bool {
+        return self.id == other.id && self.top_right.equal(&other.top_right) &&
+            self.botton_left.equal(&other.botton_left)
+    }
 
     fn mbr_of_rects(&self, another:&MBRect) -> MBRect{
         let minx1 = self.botton_left.x;
@@ -170,10 +181,10 @@ impl MBRect{
         let miny2 = another.botton_left.y;
         let maxx2 = another.top_right.x;
         let maxy2 = another.top_right.y;
-        let minx = min(minx1,minx2);
-        let miny = min(miny1,miny2);
-        let maxx = max(maxx1,maxx2);
-        let maxy = max(maxy1,maxy2);
+        let minx = minx1.min(minx2);
+        let miny = miny1.min(miny2);
+        let maxx = maxx1.max(maxx2);
+        let maxy = maxy1.max(maxy2);
         let min= Point::new(minx,miny);
         let max= Point::new(maxx,maxy);
         let rect: MBRect = MBRect::new(min,max,another.id);
@@ -189,19 +200,38 @@ impl MBRect{
         let miny2 = other.botton_left.y;
         let maxx2 = other.top_right.x;
         let maxy2 = other.top_right.y;
-        let minx = max(minx1,minx2);
-        let miny = max(miny1,miny2);
-        let maxx = min(maxx1,maxx2);
-        let maxy = min(maxy1,maxy2);
+        let minx = minx1.max(minx2);
+        let miny = miny1.max(miny2);
+        let maxx = maxx1.min(maxx2);
+        let maxy = maxy1.min(maxy2);
         return (minx < maxx) && (miny < maxy);
     }
 
-    fn rect_area (& self) -> f64 {
+    fn rect_area (&self) -> f64 {
         let minx = self.botton_left.x;
         let miny = self.botton_left.y;
         let maxx = self.top_right.x;
         let maxy = self.top_right.y;
         let area = (maxy - miny) * (maxx - minx);
+        return area;
+    }
+
+    fn point_in_rect(&self, daten:&Point) -> bool {
+        return daten.x <= self.top_right.x && daten.x >= self.botton_left.x &&
+            daten.y <= self.top_right.y && daten.y >= self.botton_left.y;
+    }
+
+    fn add_area(&self, daten:&Point) -> f64 {
+        let mut area = 0 as f64;
+        if self.point_in_rect(daten) {}
+        else {
+            let minx = self.botton_left.x.min(daten.x);
+            let miny = self.botton_left.y.min(daten.y);
+            let maxx = self.top_right.x.max(daten.x);
+            let maxy = self.top_right.y.max(daten.y);
+            let new_rect_area = (maxy - miny) * (maxx - minx);
+            area = new_rect_area - self.rect_area();
+        }
         return area;
     }
 }
@@ -217,8 +247,8 @@ impl RTree{
 
     pub fn node_is_leaf(&mut self, node: &Node) -> bool{
         match node {
-            Node::Leaf => true,
-            Node::InnerNode => false,
+            Node::Leaf {content} => true,
+            Node::InnerNode {content} => false,
         }
     }
 
@@ -227,6 +257,24 @@ impl RTree{
     fn get_node(&mut self, id: usize) -> Node {
         let mut block = self.bfa.get(id);
         let node = Node::from_block(& mut block);
+        return node;
+    }
+
+    fn mbr_of_points(&mut self, points:&mut Vec<Point>, id:usize) -> MBRect{
+        let mut minx = points.first().unwrap().x;
+        let mut miny = points.first().unwrap().y;
+        let mut maxx = points.first().unwrap().x;
+        let mut maxy = points.first().unwrap().y;
+        for i in points {
+            minx = minx.min(i.x);
+            miny = minx.min(i.y);
+            maxx = maxx.max(i.x);
+            maxy = maxx.max(i.y);
+        }
+        let bl = Point::new(minx,miny);
+        let tr = Point::new(maxx,maxy);
+        let rect = MBRect::new(bl,tr,id);
+        return rect;
     }
 
     fn get_leaf_rect(&mut self, id: usize) -> Option<Vec<MBRect>> {
@@ -235,7 +283,7 @@ impl RTree{
             Node::Leaf {content} => {
                 let mut res: Vec<MBRect> = Vec::new();
                 for i in content {
-                    res.push(i.mbr);
+                    ;
                 }
                 Some(res)
             }
@@ -245,28 +293,22 @@ impl RTree{
         }
     }
 
-    fn get_innernode_rect(&mut self, id: usize) -> Option<Vec<Vec<MBRect>>>{
+    fn get_innernode_rect(&mut self, id: usize) -> Option<Vec<MBRect>>{
         let node = self.get_node(id);
         match node {
             Node::Leaf {content} => {
                 None
             }
             Node::InnerNode {content} => {
-                let mut res: Vec<Vec<MBRect>> = Vec::new();
+                let mut res: Vec<MBRect> = Vec::new();
                 for i in content {
-                    res.push(i.mbrs);
+                    res.push(i.mbr);
                 }
                 Some(res)
             }
         }
     }
 
-    //get rect area with given id
-    fn rect_area_id(&mut self, id: usize) -> f64 {
-        let rect = self.get_rect(id);
-        let area = rect.rect_area();
-        area
-    }
 /////////////////////////////////////////////////////////////////////////////////////////
 
     fn search_overlap_innernode(&mut self, rect: &MBRect, tmp: usize, mut overlapped: Vec<usize>) -> Option<Vec<usize>>{
@@ -274,16 +316,14 @@ impl RTree{
         match tmp_node {
             Node::Leaf { content } => { None }
             Node::InnerNode { content } => {
-                for i in tmp_node.get_innernode_content().unwrap() {
+                for i in content {
                     let mut status = false;
-                    for j in i.mbrs {
-                        if rect.overlap(&j) {
-                            let children_node = self.get_node(i.children);
-                            match children_node {
-                                Node::Leaf { content } => { overlapped.push(i.children) }
-                                Node::InnerNode { content } => {
-                                    self.search_overlap_innernode(rect, i.children, overlapped.clone());
-                                }
+                    if rect.overlap(&i.mbr) {
+                        let children_node = self.get_node(i.children);
+                        match children_node {
+                            Node::Leaf { content } => { overlapped.push(i.children) }
+                            Node::InnerNode { content } => {
+                                self.search_overlap_innernode(rect, i.children, overlapped.clone());
                             }
                         }
                     }
@@ -302,17 +342,15 @@ impl RTree{
         match tmp_node {
             Node::InnerNode {content} => {None}
             Node::Leaf {content} => {
-                for i in tmp_node.get_leaf_content().unwrap() {
-                    if rect.overlap(&i.mbr) {
-                        for j in i.daten {
-                            res.push(j);
-                        }
+                for i in content {
+                    if rect.point_in_rect(&i) {
+                        res.push(i);
                     }
                 }
                 Some(res)
             }
         }
-        None
+
     }
 
     fn search(&mut self, rect: &MBRect) -> Option<Vec<Point>>{
@@ -320,10 +358,10 @@ impl RTree{
         //Erstelle Block, Node von der Wurzel
         let root_id = self.root_id;
         let root_node = self.get_node(root_id);
+        let mut res:Option<Vec<Point>> = None;
         match root_node {
             Node::Leaf {content} => {
-                let res = self.search_overlap_leafnode(rect,root_id);
-                res
+                res = self.search_overlap_leafnode(rect,root_id);
             }
             //Node ist InnerNode
             Node::InnerNode {content} => {
@@ -337,106 +375,90 @@ impl RTree{
                 }
             }
         }
+        return res;
     }
 
 
     ////////////////////////////////////////////////////////////////////////////////
     //insert a new node into RTree
 
-    fn insert(&mut self, insert_rect: MBRect){
-        let parent: Vec<usize> = Vec::new();
-        let leaf_id = self.choose_leaf(self.root_id,&insert_rect,&parent).0;
-        let id_ancestry = self.choose_leaf(self.root_id,&insert_rect,&parent).1;
+    fn insert(&mut self, insert_daten:Point){
+        let mut parent: Vec<usize> = Vec::new();
+        let leaf_id = self.choose_leaf(self.root_id, &insert_daten, &mut parent).0;
+        let mut id_ancestry = self.choose_leaf(self.root_id, &insert_daten, &mut parent).1;
         let mut leaf_node = self.get_node(leaf_id);
         let mut leaf_elem_num = leaf_node.get_innernode_content().unwrap().len();
 
-        self.add_rect_in_leaf(leaf_id,insert_rect);
+        self.add_point_in_leaf(leaf_id,insert_daten);
         if leaf_elem_num <= self.M {
             let block = Node::to_block(&leaf_node);
-            self.adjust_tree(leaf_id, id_ancestry, -1);
             self.bfa.update(leaf_id,block);
+            self.adjust_tree(leaf_id, &mut id_ancestry, false, 0);
         }
         else {
-            let LL = self.split(leaf_id).2;
-            self.adjust_tree(leaf_id,id_ancestry,LL.children)
-        }
-
-        let mut root_node = self.get_node(self.root_id);
-        match root_node {
-            Node::InnerNode {mut content} => {
-                if root_node.get_innernode_content().unwrap().len() > self.M {
-                    let mut N = self.split(self.root_id).0.get(0).unwrap();
-                    let mut NN = self.split(self.root_id).0.get(1).unwrap();
-                    let mut EN = self.split(self.root_id).1;
-                    let mut ENN = self.split(self.root_id).2;
-                    &content = N.get_innernode_content().unwrap();
-
-                    let mut new_root = Node::InnerNode;
-                    new_root.set_innernode_content(vec![EN,ENN]);
-                }
-            }
-            Node::Leaf {mut content} => {
-                if root_node.get_leaf_content().unwrap().len() > self.M {
-                    let mut N = self.split(self.root_id).0.get(0).unwrap();
-                    let mut NN = self.split(self.root_id).0.get(1).unwrap();
-                    let mut EN = self.split(self.root_id).1;
-                    let mut ENN = self.split(self.root_id).2;
-                    &content = N.get_leaf_content().unwrap();
-
-                    let mut new_root = Node::InnerNode ;
-                    new_root.set_innernode_content(vec![EN,ENN]);
-                }
-            }
+            let spelt_id = self.split(leaf_id);
+            self.adjust_tree(leaf_id, &mut id_ancestry, true, spelt_id)
         }
     }
 
+    fn add_point_in_leaf(&mut self,leaf_id:usize,daten:Point) {
+        let mut leaf_node = self.get_node(leaf_id);
+        leaf_node.get_leaf_content().unwrap().push(daten);
+        let leaf_block = Node::to_block(&leaf_node);
+        self.bfa.update(leaf_id,leaf_block);
+    }
+
+    /*
+    //Hilfsfunktion
     fn add_rect_in_leaf(&mut self,leaf_id:usize,rect:MBRect) {
         let mut leaf_node = self.get_node(leaf_id);
         let new_leaf = LeafElement{ daten: vec![], mbr: rect };
         leaf_node.get_leaf_content().unwrap().push(new_leaf);
     }
+    */
 
 
 
+    /*
     //Hilfsfunktion fuer choose_leaf und choose_leaves
     fn add_area(&mut self, small_rect: &MBRect, big_rect: &MBRect) -> f64{
         let new = small_rect.mbr_of_rects(big_rect);
         let add_area = new.rect_area() - big_rect.rect_area();
         add_area
     }
+     */
 
 
-    //TODO
     //Hilfsfunktion fuer insert
     //Find position for new record
-    fn choose_leaf(&mut self, tmp: usize, insert_rect:&MBRect, mut parent: &Vec<usize>) -> (usize, &Vec<usize>) {
+    fn choose_leaf(&mut self, tmp: usize, insert_daten:&Point, parent: &mut Vec<usize>) -> (usize, Vec<usize>) {
         let mut tmp_node = self.get_node(tmp);
         if !self.node_is_leaf(&tmp_node) {
-            let mut min_add_area:f64 = 0 as f64;
-            let mut min_node_id = tmp;
-            let mut min_node_area: f64;
+            let mut min_add_area = tmp_node.get_innernode_content().unwrap().get(0).unwrap().mbr.add_area(insert_daten);
+            let mut min_node_id = tmp_node.get_innernode_content().unwrap().get(0).unwrap().children;
+            let mut min_node_area = tmp_node.get_innernode_content().unwrap().get(0).unwrap().mbr.rect_area();
             for i in tmp_node.get_innernode_content().unwrap() {
-                let mut i_mbr = self.get_inner_element_mbr(i);
-                if self.add_area(insert_rect, &i_mbr) < min_add_area {
-                    min_add_area = self.add_area(insert_rect, &i_mbr);
+                if i.mbr.add_area(insert_daten) < min_add_area {
+                    min_add_area = i.mbr.add_area(insert_daten);
                     min_node_id = i.children;
-                    min_node_area = i_mbr.rect_area();
+                    min_node_area = i.mbr.rect_area();
                 }
-                else if self.add_area(insert_rect,&i_mbr) == min_node_area {
-                    if i_mbr.rect_area() < min_node_area {
+                else if i.mbr.add_area(insert_daten) == min_node_area {
+                    if i.mbr.rect_area() < min_node_area {
                         min_node_id = i.children;
-                        min_node_area = i_mbr.rect_area();
+                        min_node_area = i.mbr.rect_area();
                     }
-                 } }
-            self.choose_leaf(min_node_id,insert_rect,parent)
+                 }
+            }
+            parent.push(tmp);
+            self.choose_leaf(min_node_id,insert_daten,parent)
         }
         else {
-            parent.push(tmp);
-            return (tmp,parent);
+            return (tmp,parent.to_vec());
         }
     }
 
-
+/*
     fn get_inner_element_mbr (&mut self, elem: &InnerElement) -> MBRect{
         let mut min_bl_x: f64 = 0 as f64;
         let mut min_bl_y: f64 = 0 as f64;
@@ -450,74 +472,79 @@ impl RTree{
         }
         tmp_rect
     }
+*/
+
+    //Hilfsfunktion fuer adjust
+    fn get_node_mbr(&mut self, node_id:usize) -> MBRect {
+        let mut node = self.get_node(node_id);
+        match node {
+            Node::Leaf {content} => {
+                let mbrs = self.get_leaf_rect(node_id).unwrap();
+                let mut mbrs_clone = mbrs.clone();
+                let mut mbr = mbrs_clone.pop().unwrap();
+                while mbrs_clone.len() != 1 {
+                    mbr = mbr.mbr_of_rects(&mbrs_clone.pop().unwrap());
+                }
+                return mbr;
+            }
+            Node::InnerNode {content} => {
+                let mbrs = self.get_innernode_rect(node_id).unwrap();
+                let mut mbrs_clone = mbrs.clone();
+                let mut mbr = mbrs_clone.pop().unwrap();
+                while mbrs_clone.len() != 1 {
+                    mbr = mbr.mbr_of_rects(&mbrs_clone.pop().unwrap());
+                }
+                return mbr;
+            }
+        }
+    }
 
     //acsend from a leaf node with id to the root
-    // adjusting covering rectangles
-    fn adjust_tree(& mut self, id: usize, mut id_ancestry: &Vec<usize>, split: usize){
+    //adjusting covering rectangles
+    fn adjust_tree(& mut self, id: usize, id_ancestry: &mut Vec<usize>, soll_spelt:bool, split: usize){
         let mut id_node = self.get_node(id);
         let mut parent = id_ancestry.pop().unwrap();
         let mut parent_node = self.get_node(parent);
         //check if done, stop
-        if id == self.root_id{}
+        if id == self.root_id{
+            if !soll_spelt {}
+            else {
+                //split root
+                let EN = InnerElement::new(self.get_node_mbr(id),id);
+                let ENN = InnerElement::new(self.get_node_mbr(split),split);
+                let mut new_root_node = Node::InnerNode { content: vec![EN,ENN] };
+                let new_root_id = self.bfa.reserve();
+                let mut new_root_block = Node::to_block(&new_root_node);
+                self.bfa.update(new_root_id,new_root_block);
+            }
+        }
         else {
-            if split == -1 {
+            if !soll_spelt {
                 for i in parent_node.get_innernode_content().unwrap() {
                     if i.children == id {
-                        let mut new_mbrs: Vec<MBRect> = Vec::new();
-                        if self.node_is_leaf(&id_node) {
-                            for j in id_node.get_leaf_content().unwrap(){
-                                new_mbrs.push(*j.mbr);
-                            }
-                        }
-                        else {
-                            for j in id_node.get_innernode_content().unwrap(){
-                                new_mbrs.push(self.get_inner_element_mbr(j));
-                            }
-                        }
-                        i.set_mbrs(new_mbrs);
+                        i.set_mbr(self.get_node_mbr(id));
                     }
                 }
-                self.adjust_tree(parent,id_ancestry,-1)
+                let mut parent_block = Node::to_block(&parent_node);
+                self.bfa.update(parent,parent_block);
+                self.adjust_tree(parent,id_ancestry,false,0)
             }
             else {
-                let spelt = self.split(id);
-                let mut N = spelt.0.get(0).unwrap();
-                let EN = spelt.1;
-                let ENN = spelt.2;
-                match id_node {
-                    Node::Leaf {mut content} => {
-                        &content = N.get_leaf_content().unwrap();
-                        for i in parent_node.get_innernode_content().unwrap() {
-                            if i.children == id {
-                                //i is parent innerelement
-                                i.set_mbrs(self.split(id).1.mbrs);
-                            }
-                        }
-                        parent_node.get_innernode_content().unwrap().push(ENN);
-                        if parent_node.get_innernode_content().unwrap().len() <= self.M {
-                            self.adjust_tree(parent,id_ancestry,-1)
-                        }
-                        else {
-                            let EPP = self.split(parent).2;
-                            self.adjust_tree(parent,id_ancestry,EPP.children);
-                        }
+                for i in parent_node.get_innernode_content().unwrap() {
+                    if i.children == id {
+                        i.set_mbr(self.get_node_mbr(id));
                     }
-                    Node::InnerNode { mut content } => {
-                        &content = N.get_innernode_content().unwrap();
-                        for i in parent_node.get_innernode_content().unwrap() {
-                            if i.children == id {
-                                i.set_mbrs(self.split(id).1.mbrs);
-                            }
-                        }
-                        parent_node.get_innernode_content().unwrap().push(ENN);
-                        if parent_node.get_innernode_content().unwrap().len() <= self.M {
-                            self.adjust_tree(parent,id_ancestry,-1)
-                        }
-                        else {
-                            let EPP = self.split(parent).2;
-                            self.adjust_tree(parent,id_ancestry,EPP.children);
-                        }
-                    }
+                }
+                let new = InnerElement::new(self.get_node_mbr(split),split);
+                parent_node.get_innernode_content().unwrap().push(new);
+                let mut parent_block = Node::to_block(&parent_node);
+                self.bfa.update(parent,parent_block);
+                if parent_node.get_innernode_content().unwrap().len() <= self.M {
+                    self.adjust_tree(parent,id_ancestry,false,0)
+                }
+                else {
+                    let spelt_id = self.split(parent);
+                    self.adjust_tree(parent,id_ancestry,true,spelt_id);
                 }
             }
         }
@@ -525,62 +552,64 @@ impl RTree{
     }
 
 
-    fn split(&mut self, id: usize) -> (Vec<Node>,InnerElement,InnerElement){
+    fn split(&mut self, id: usize) -> usize{
         let mut groups = self.pick_next(id);
-        let group_1_index = groups.get(0).unwrap() ;
+        let group_1_index = groups.get(0).unwrap();
         let group_2_index = groups.get(1).unwrap();
         let mut node = self.get_node(id);
-
-        let mut group_1_mbr: Vec<MBRect> = Vec::new();
-        let mut group_2_mbr: Vec<MBRect> = Vec::new();
         let mut node_vec: Vec<Node> = vec![];
 
         match node {
-            Node::InnerNode {content} => {
+            Node::InnerNode {mut content} => {
+                let mut content_clone = content.clone();
                 let mut group_1_node = Node::InnerNode { content: vec![] };
                 let mut group_2_node = Node::InnerNode { content: vec![] };
-                for i in *group_1_index {
-                    let elem = content.get(i).unwrap();
-                    group_1_mbr.push(self.get_inner_element_mbr(elem));
-                    //group_1_node.get_innernode_content().unwrap().push(elem);
+                for i in group_1_index {
+                    let elem = content.get(*i).unwrap();
+                    while !content_clone.get(content_clone.len()-1).unwrap().equal(elem) {
+                        content_clone.pop();
+                    }
+                    group_1_node.get_innernode_content().unwrap().push(content_clone.pop().unwrap());
                 }
-                for i in *group_2_index {
-                    let elem = content.get(i).unwrap();
-                    group_2_mbr.push(self.get_inner_element_mbr(elem));
-                    //group_2_node.get_innernode_content().unwrap().push(*elem);
+                for i in group_2_index {
+                    let elem = content.get(*i).unwrap();
+                    while !content_clone.get(content_clone.len()-1).unwrap().equal(elem) {
+                        content_clone.pop();
+                    }
+                    group_2_node.get_innernode_content().unwrap().push(content_clone.pop().unwrap());
                 }
                 node_vec = vec![group_1_node,group_2_node];
             }
             Node::Leaf {content} => {
+                let mut content_clone = content.clone();
                 let mut group_1_node = Node::Leaf { content: vec![] };
                 let mut group_2_node = Node::Leaf { content: vec![] };
-                for i in *group_1_index {
-                    let elem = content.get(i).unwrap();
-                    group_1_mbr.push(*elem.mbr);
-                    //group_1_node.get_leaf_content().unwrap().push(*elem);
+                for i in group_1_index {
+                    let elem = content.get(*i).unwrap();
+                    while !content_clone.get(content_clone.len()-1).unwrap().equal(elem) {
+                        content_clone.pop();
+                    }
+                    group_1_node.get_leaf_content().unwrap().push(content_clone.pop().unwrap());
                 }
-                for i in *group_2_index {
-                    let elem = content.get(i).unwrap();
-                    group_2_mbr.push(*elem.mbr);
-                    //group_2_node.get_leaf_content().unwrap().push(*elem);
+                for i in group_2_index {
+                    let elem = content.get(*i).unwrap();
+                    while !content_clone.get(content_clone.len()-1).unwrap().equal(elem) {
+                        content_clone.pop();
+                    }
+                    group_2_node.get_leaf_content().unwrap().push(content_clone.pop().unwrap());
                 }
                 node_vec = vec![group_1_node,group_2_node];
             }
         }
-        let elem_1 = InnerElement{ mbrs: group_1_mbr, children: id };
         let node_2_id = self.bfa.reserve();
-        let elem_2 = InnerElement{ mbrs: group_2_mbr, children: node_2_id };
         let block_2 = Node::to_block(node_vec.get(1).unwrap());
         self.bfa.update(node_2_id,block_2);
         let block_1 = Node::to_block(node_vec.get(0).unwrap());
         self.bfa.update(id,block_1);
         //LeafNode kann als InnerElement als parentNode (InnerNode) sein
         //InnerNode kann auch als InnerElement sein
-        return (node_vec,elem_1,elem_2);
+        return node_2_id;
     }
-
-
-
 
 
     fn area_two_rect(&mut self, rect1:&MBRect, rect2:&MBRect) -> f64 {
@@ -589,7 +618,7 @@ impl RTree{
         area
     }
 
-    //TODO FERTIG
+
     //Hilfsfkt fuer split
     //select two entries to be the first elements of the groups
     fn pick_seeds(&mut self, id:usize) -> Vec<usize>{
@@ -603,10 +632,8 @@ impl RTree{
             Node::InnerNode {content} => {
                 for i in 0..content.len() - 2 {
                     for j in 1..content.len() - 1 {
-                        let elem_1 = &content[i];
-                        let elem_2 = &content[j];
-                        let pick_rect_1 = self.get_inner_element_mbr(elem_1);
-                        let pick_rect_2 = self.get_inner_element_mbr(elem_2);
+                        let pick_rect_1 = &content.get(i).unwrap().mbr;
+                        let pick_rect_2 = &content.get(j).unwrap().mbr;
                         let blank_area = self.area_two_rect(&pick_rect_1, &pick_rect_2) - pick_rect_1.rect_area() - pick_rect_2.rect_area();
                         if blank_area > largest_d {
                             largest_d = blank_area;
@@ -619,11 +646,10 @@ impl RTree{
             Node::Leaf {content} => {
                 for i in 0..content.len() - 2 {
                     for j in 1..content.len() - 1 {
-                        let elem_1 = &content[i];
-                        let elem_2 = &content[j];
-                        let pick_rect_1 = &elem_1.mbr;
-                        let pick_rect_2 = &elem_2.mbr;
-                        let blank_area = self.area_two_rect(&pick_rect_1, &pick_rect_2) - pick_rect_1.rect_area() - pick_rect_2.rect_area();
+                        let pick_rect_1 = *content.get(i).unwrap();
+                        let pick_rect_2 = *content.get(j).unwrap();
+                        let mut points = vec![pick_rect_1, pick_rect_2];
+                        let blank_area = self.mbr_of_points(&mut points, id).rect_area();
                         if blank_area > largest_d {
                             largest_d = blank_area;
                             s1 = i;
@@ -638,7 +664,7 @@ impl RTree{
         res
     }
 
-    //TODO FERTIG
+
     //Hilfsfkt fuer split
     //select remaining entries for classification in groups
     fn pick_next(&mut self, id:usize) -> Vec<Vec<usize>>{
@@ -652,11 +678,11 @@ impl RTree{
 
         match spelt_node {
             Node::InnerNode { content } => {
-                let assigned_rect_1 = self.get_inner_element_mbr(&content[seed1]);
-                let assigned_rect_2 = self.get_inner_element_mbr(&content[seed2]);
+                let assigned_rect_1 = &content.get(seed1).unwrap().mbr;
+                let assigned_rect_2 = &content.get(seed2).unwrap().mbr;
 
                 for i in 0..content.len() - 1 {
-                    let tmp_rect = self.get_inner_element_mbr(&content[i]);
+                    let tmp_rect = &content.get(i).unwrap().mbr;
                     //seed1 kommt vor, d1 = - seed1.mbr.area, d1 < d2 erfüllt
                     //seed1 wird in assigned 1 hinzufügt
                     let d1 = self.area_two_rect(&tmp_rect, &assigned_rect_1) - tmp_rect.rect_area() - assigned_rect_1.rect_area();
@@ -669,13 +695,15 @@ impl RTree{
                 }
             }
             Node::Leaf { content } => {
-                let assigned_rect_1 = &content[seed1].mbr;
-                let assigned_rect_2 = &content[seed2].mbr;
+                let assigned_point_1 = *content.get(seed1).unwrap();
+                let assigned_point_2 = *content.get(seed2).unwrap();
 
                 for i in 0..content.len() - 1 {
-                    let tmp_rect = &content[i].mbr;
-                    let d1 = self.area_two_rect(tmp_rect, &assigned_rect_1) - tmp_rect.rect_area() - assigned_rect_1.rect_area();
-                    let d2 = self.area_two_rect(tmp_rect, &assigned_rect_2) - tmp_rect.rect_area() - assigned_rect_2.rect_area();
+                    let tmp_point = *content.get(i).unwrap();
+                    let mut points1 = vec![tmp_point,assigned_point_1];
+                    let mut points2 = vec![tmp_point,assigned_point_2];
+                    let d1 = self.mbr_of_points(&mut points1,id).rect_area();
+                    let d2 = self.mbr_of_points(&mut points2,id).rect_area();
                     if d1 <= d2 {
                         assigned_1.push(i);
                     } else {
@@ -720,7 +748,7 @@ use serde::{Serialize, Deserialize};
 use bincode::{serialize, deserialize};
 use core::borrow::Borrow;
 use std::cmp::{min, max};
-use std::intrinsics::{breakpoint, ceilf64};
+//use std::intrinsics::{breakpoint, ceilf64};
 use std::panic::resume_unwind;
 use crate::Node::{InnerNode, Leaf};
 use std::ops::BitAnd;
@@ -901,7 +929,7 @@ impl BFA {
         BFA{block_size,file,metadaten,update_file,reserved_file,reserve_count}*/
     }
 
-    pub fn get(&mut self, &id:usize) -> Block{
+    pub fn get(&mut self, id:usize) -> Block{
         let mut vec:Vec<u8> = vec![0;self.block_size];
 
         if self.update_file[id] {
@@ -925,8 +953,8 @@ impl BFA {
             self.file.seek(SeekFrom::Start(start));
             self.file.write(&block.contents);
             self.file.seek(SeekFrom::Start(0));
-            self.reserved_file[&id] = false;
-            self.update_file[&id] =true;
+            self.reserved_file[id] = false;
+            self.update_file[id] =true;
         }
     }
 
