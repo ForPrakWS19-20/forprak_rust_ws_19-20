@@ -66,7 +66,6 @@ pub struct Point{
 
 #[derive(Debug, Deserialize, Serialize,Clone,Copy)]
 pub struct MBRect{
-    id: usize,
     botton_left:Point,
     top_right:Point,
 }
@@ -159,12 +158,12 @@ impl Point{
 }
 
 impl MBRect{
-    pub fn new(bl:Point, tp:Point, id:usize) -> Self{
-        MBRect{id, botton_left: bl, top_right: tp }
+    pub fn new(bl:Point, tp:Point) -> Self{
+        MBRect{botton_left: bl, top_right: tp }
     }
 
     pub fn equal (&self, other:&MBRect) -> bool {
-        return self.id == other.id && self.top_right.equal(&other.top_right) &&
+        return self.top_right.equal(&other.top_right) &&
             self.botton_left.equal(&other.botton_left)
     }
 
@@ -183,7 +182,7 @@ impl MBRect{
         let maxy = maxy1.max(maxy2);
         let min= Point::new(minx,miny);
         let max= Point::new(maxx,maxy);
-        let rect: MBRect = MBRect::new(min,max,another.id);
+        let rect: MBRect = MBRect::new(min,max);
         rect
     }
 
@@ -200,7 +199,7 @@ impl MBRect{
         let maxy = maxy1.max(y2);
         let min= Point::new(minx,miny);
         let max= Point::new(maxx,maxy);
-        let mbr = MBRect::new(min,max,self.id);
+        let mbr = MBRect::new(min,max);
         return mbr;
     }
 
@@ -292,7 +291,7 @@ pub fn get_node(&mut self, id: usize) -> Node {
         }
         let bl = Point::new(minx,miny);
         let tr = Point::new(maxx,maxy);
-        let rect = MBRect::new(bl,tr,id);
+        let rect = MBRect::new(bl,tr);
         return rect;
     }
 
@@ -518,7 +517,7 @@ pub fn get_node(&mut self, id: usize) -> Node {
             Node::Leaf {content} => {
                 let mut points = content.clone();
                 if points.len() ==1 {
-                    let mbr = MBRect::new(*points.get(0).unwrap(),*points.get(0).unwrap(),node_id);
+                    let mbr = MBRect::new(*points.get(0).unwrap(),*points.get(0).unwrap());
                     return mbr
                 }else{
                     let p1= points.pop().unwrap();
@@ -1186,7 +1185,7 @@ mod test {
         rtree.insert(point2);
         let point3 = Point::new(3.0,3.0);
         rtree.insert(point3);
-        let rect = MBRect::new(Point::new(0.5,0.5),Point::new(2.5,2.5),0);
+        let rect = MBRect::new(Point::new(0.5,0.5),Point::new(2.5,2.5));
         let search = rtree.search(&rect).unwrap();
         for i in 0..search.len() {
             assert_eq!(search.get(i).unwrap().x,vec![point1,point2].get(i).unwrap().x);
@@ -1207,7 +1206,7 @@ mod test {
         rtree.insert(point4);
         let point5 = Point::new(5.0,5.0);
         rtree.insert(point5);
-        let rect = MBRect::new(Point::new(0.5,0.5),Point::new(2.5,2.5),0);
+        let rect = MBRect::new(Point::new(0.5,0.5),Point::new(2.5,2.5));
         let search = rtree.search(&rect).unwrap();
         for i in 0..search.len() {
             assert_eq!(search.get(i).unwrap().x,vec![point1,point2].get(i).unwrap().x);
@@ -1224,7 +1223,7 @@ mod test {
         rtree.insert(point2);
         let point3 = Point::new(3.0,3.0);
         rtree.insert(point3);
-        let rect = MBRect::new(Point::new(1.2,1.2),Point::new(1.5,1.5),0);
+        let rect = MBRect::new(Point::new(1.2,1.2),Point::new(1.5,1.5));
         let search = rtree.search(&rect).unwrap();
         assert_eq!(search.len(),0);
     }
