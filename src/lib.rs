@@ -682,9 +682,9 @@ pub fn get_node(&mut self, id: usize) -> Node {
                     for j in 1..content.len() {
                         let pick_rect_1 = &content.get(i).unwrap().mbr;
                         let pick_rect_2 = &content.get(j).unwrap().mbr;
-                        let blank_area = self.area_two_rect(&pick_rect_1, &pick_rect_2) - pick_rect_1.rect_area() - pick_rect_2.rect_area();
-                        if blank_area > largest_d {
-                            largest_d = blank_area;
+                        let d = self.area_two_rect(&pick_rect_1, &pick_rect_2) - pick_rect_1.rect_area() - pick_rect_2.rect_area();
+                        if d > largest_d {
+                            largest_d = d;
                             s1 = i;
                             s2 = j;
                         }
@@ -697,9 +697,9 @@ pub fn get_node(&mut self, id: usize) -> Node {
                         let pick_rect_1 = *content.get(i).unwrap();
                         let pick_rect_2 = *content.get(j).unwrap();
                         let mut points = vec![pick_rect_1, pick_rect_2];
-                        let blank_area = self.mbr_of_points(&mut points, id).rect_area();
-                        if blank_area > largest_d {
-                            largest_d = blank_area;
+                        let d = self.mbr_of_points(&mut points, id).rect_area();
+                        if d > largest_d {
+                            largest_d = d;
                             s1 = i;
                             s2 = j;
                         }
@@ -1148,8 +1148,38 @@ mod test {
     }
 
     #[test]
-    pub fn test_insert_with_split(){
-        let mut rtree = RTree::new(4,"test_insert_with_split()",1000);
+    pub fn test_insert_with_split_leaf_and_root(){
+        let mut rtree = RTree::new(4,"test_insert_with_split_leaf_and_root()",1000);
+        let point1 = Point::new(1.0,1.0);
+        rtree.insert(point1);
+        let point2 = Point::new(2.0,2.0);
+        rtree.insert(point2);
+        let point3 = Point::new(3.0,3.0);
+        rtree.insert(point3);
+        let point4 = Point::new(4.0,4.0);
+        rtree.insert(point4);
+        let point5 = Point::new(5.0,5.0);
+        rtree.insert(point5);
+        let v1 = vec![point1,point2,point3];
+        let v2 = vec![point4,point5];
+        //Das RootNode N0 wird gespelt zu N0 und N1
+        //Das neue RootNode ist N2
+        assert_eq!(rtree.root_id,2);
+        for i in 0..v1.len() {
+            assert_eq!(rtree.get_node(0).get_leaf_content().unwrap().get(i).unwrap().x,v1.get(i).unwrap().x);
+            assert_eq!(rtree.get_node(0).get_leaf_content().unwrap().get(i).unwrap().y,v1.get(i).unwrap().y);
+        }
+        for i in 0..v2.len() {
+            assert_eq!(rtree.get_node(1).get_leaf_content().unwrap().get(i).unwrap().x,v2.get(i).unwrap().x);
+            assert_eq!(rtree.get_node(1).get_leaf_content().unwrap().get(i).unwrap().y,v2.get(i).unwrap().y);
+        }
+        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().children,0);
+        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(1).unwrap().children,1);
+    }
+
+    #[test]
+    pub fn test_insert_with_split_inner(){
+        let mut rtree = RTree::new(2,"test_insert_with_split_inner()",1000);
         let point1 = Point::new(1.0,1.0);
         rtree.insert(point1);
         let point2 = Point::new(2.0,2.0);
@@ -1163,18 +1193,29 @@ mod test {
         let res:Vec<Point> = Vec::new();
         let v1 = vec![point1,point2,point3];
         let v2 = vec![point4,point5];
-        assert_eq!(rtree.root_id,2);
-        for i in 0..v1.len() {
-            assert_eq!(rtree.get_node(0).get_leaf_content().unwrap().get(i).unwrap().x,v1.get(i).unwrap().x);
-            assert_eq!(rtree.get_node(0).get_leaf_content().unwrap().get(i).unwrap().y,v1.get(i).unwrap().y);
-        }
-        for i in 0..v2.len() {
-            assert_eq!(rtree.get_node(1).get_leaf_content().unwrap().get(i).unwrap().x,v2.get(i).unwrap().x);
-            assert_eq!(rtree.get_node(1).get_leaf_content().unwrap().get(i).unwrap().y,v2.get(i).unwrap().y);
-        }
-        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().children,0);
-        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(1).unwrap().children,1);
+        assert_eq!(rtree.root_id,5);
+        assert_eq!(rtree.get_node(5).get_innernode_content().unwrap().get(0).unwrap().children,2);
+        assert_eq!(rtree.get_node(5).get_innernode_content().unwrap().get(1).unwrap().children,4);
+        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().children,3);
+        assert_eq!(rtree.get_node(4).get_innernode_content().unwrap().get(0).unwrap().children,1);
+        assert_eq!(rtree.get_node(4).get_innernode_content().unwrap().get(1).unwrap().children,0);
+
+        //Wenn Point(4,4) hinzufügt wird, ist das LeafNode mit Points(3,3),(4,4) schon voll
+        //Das LeafNode besitzt parentNode Node2
+        //(5,5) hinzufügen -> split das LeafNode mit Points(3,3),(4,4),(5,5)
+        //Es ist im Code nach der Reihefolge (5,5),(4,4),(3,3)
+        //Das Node split zum Node mit Point(5,5) und Node mit Points(4,4),(3,3)
+        //Das Node mit Point(5,5) erwirbt parentNode Node2 vom alten Node
+        //Das Node mit Points(4,4),(3,3) kriegt eine neue ID 4.
+        assert_eq!(rtree.get_node(3).get_leaf_content().unwrap().get(0).unwrap().x,5.0);
+        assert_eq!(rtree.get_node(1).get_leaf_content().unwrap().get(0).unwrap().x,3.0);
+        assert_eq!(rtree.get_node(1).get_leaf_content().unwrap().get(1).unwrap().x,4.0);
+        assert_eq!(rtree.get_node(0).get_leaf_content().unwrap().get(0).unwrap().x,1.0);
+        assert_eq!(rtree.get_node(0).get_leaf_content().unwrap().get(1).unwrap().x,2.0);
     }
+
+
+
 
     #[test]
     pub fn test_search_without_split() {

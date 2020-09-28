@@ -2,12 +2,29 @@
 
 use std::fs::File;
 use std::io::Write;
-use Foprak::{Student, BFA};
+use Foprak::{Student, BFA, Point, RTree, MBRect};
 
 
 fn main() {
+    let mut rtree = RTree::new(2,"test_insert",1000);
+    let point1 = Point::new(1.0,1.0);
+    rtree.insert(point1);
+    let point2 = Point::new(2.0,2.0);
+    rtree.insert(point2);
+    let point3 = Point::new(3.0,3.0);
+    rtree.insert(point3);
+    let point4 = Point::new(4.0,4.0);
+    rtree.insert(point4);
+    let point5 = Point::new(5.0,5.0);
+    rtree.insert(point5);
+    let point6 = Point::new(6.0,6.0);
+    rtree.insert(point6);
+    let point7 = Point::new(7.0,7.0);
+    rtree.insert(point7);
+    //println!("{:?}",rtree.get_node(2).get_innernode_content().unwrap());
+    println!("{:?}",rtree.root_id);
     //file_bfa();
-    student_block();
+    //student_block();
 
 
 }
@@ -49,12 +66,14 @@ pub fn file_bfa(){
 
     let total = bfa_1.file.metadata().unwrap().len() as usize / bfa_1.block_size + 1;
     for i in 0 .. total as u64{
-        let block = bfa_1.get(i as usize);
+        let block = bfa_1.get(i as usize).unwrap();
         let nr = bfa_2.reserve();
-        println!("{}",nr);
+        //println!("{}",nr);
 
         bfa_2.update(nr, block);
+        println!("{}", bfa_2.block_size);
     }
+
 
     bfa_1.close();
     bfa_2.close();
