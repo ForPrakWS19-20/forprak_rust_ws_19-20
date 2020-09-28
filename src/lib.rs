@@ -5,6 +5,7 @@ use std::{fs, mem};
 use std::iter::Map;
 use std::collections::HashMap;
 use std::time::SystemTime;
+use std::error::Error;
 
 
 // BFA, Block file access, bietet die Moeglichkeit, Block zu get und put
@@ -15,11 +16,11 @@ pub struct BFA{
     pub block_size: usize,
     pub file: File,
     //metadata sollte auf Typ Map sein
-    metadaten: HashMap<String,String>,
+    pub metadaten: HashMap<String,String>,
     //1 for true, 0 for false
-    update_file: Vec<bool>,
-    reserved_file: Vec<bool>,
-    reserve_count:usize
+    pub update_file: Vec<bool>,
+    pub reserved_file: HashMap<usize,bool>,
+    pub reserve_count:usize
 }
 
 pub struct Block{
@@ -27,8 +28,8 @@ pub struct Block{
 }
 
 pub struct RTree{
-    root_id:usize,
-    bfa: BFA,
+    pub root_id:usize,
+    pub bfa: BFA,
     dimension:usize,
     total_id: usize,
     M: usize
@@ -50,9 +51,9 @@ pub enum Node{
 
 #[derive(Debug, Deserialize, Serialize,Clone,Copy)]
 pub struct InnerElement {
-    mbr:MBRect,
+    pub mbr:MBRect,
     //ID, mit welcher Blöcke vom BFA geholt werden können
-    children:usize
+    pub children:usize
 }
 
 #[derive(Debug, Deserialize, Serialize,Clone,Copy)]
@@ -122,11 +123,6 @@ impl Node{
         bincode::serialize(&self).unwrap()
     }
 
-    pub fn to_block (&self) -> Block {
-        let obj = bincode::serialize(self).unwrap();
-        let block = Block::new(obj);
-        block
-    }
 }
 
 impl InnerElement{
@@ -191,6 +187,23 @@ impl MBRect{
         rect
     }
 
+    fn mbr_of_point_and_rect(&self, point:&Point) -> MBRect{
+        let minx1 = self.botton_left.x;
+        let miny1 = self.botton_left.y;
+        let maxx1 = self.top_right.x;
+        let maxy1 = self.top_right.y;
+        let x2 = point.x;
+        let y2 = point.y;
+        let minx = minx1.min(x2);
+        let miny = miny1.min(y2);
+        let maxx = maxx1.max(x2);
+        let maxy = maxy1.max(y2);
+        let min= Point::new(minx,miny);
+        let max= Point::new(maxx,maxy);
+        let mbr = MBRect::new(min,max,self.id);
+        return mbr;
+    }
+
     fn overlap(&self, other: &MBRect) -> bool {
         let minx1 = self.botton_left.x;
         let miny1 = self.botton_left.y;
@@ -207,7 +220,7 @@ impl MBRect{
         return (minx < maxx) && (miny < maxy);
     }
 
-    fn rect_area (&self) -> f64 {
+    pub fn rect_area (&self) -> f64 {
         let minx = self.botton_left.x;
         let miny = self.botton_left.y;
         let maxx = self.top_right.x;
@@ -238,11 +251,17 @@ impl MBRect{
 
 
 impl RTree{
-    fn new(mut bfa: BFA, total_id: usize, M: usize) -> Self{
-        let root_id = bfa.get_root();
+    pub fn new(M: usize, path:&str, block_size:usize) -> Self{
+        let bfa = BFA::new(block_size, path);
         let dimension: usize = 2;
 
-        RTree{root_id, bfa, dimension, total_id, M}
+        RTree{
+            root_id: 0,
+            bfa,
+            dimension,
+            total_id: 0,
+            M
+        }
     }
 
     pub fn node_is_leaf(&mut self, node: &Node) -> bool{
@@ -254,13 +273,13 @@ impl RTree{
 
 //////////////////////////////////////////////////////////////////////////////////////////
     //Basis Funktion
-    fn get_node(&mut self, id: usize) -> Node {
-        let mut block = self.bfa.get(id);
+pub fn get_node(&mut self, id: usize) -> Node {
+        let mut block = self.bfa.get(id).unwrap();
         let node = Node::from_block(& mut block);
         return node;
     }
 
-    fn mbr_of_points(&mut self, points:&mut Vec<Point>, id:usize) -> MBRect{
+    pub fn mbr_of_points(&mut self, points:&mut Vec<Point>, id:usize) -> MBRect{
         let mut minx = points.first().unwrap().x;
         let mut miny = points.first().unwrap().y;
         let mut maxx = points.first().unwrap().x;
@@ -277,13 +296,13 @@ impl RTree{
         return rect;
     }
 
-    fn get_leaf_rect(&mut self, id: usize) -> Option<Vec<MBRect>> {
+    pub fn get_leaf_points(&mut self, id: usize) -> Option<Vec<Point>> {
         let node = self.get_node(id);
         match node {
             Node::Leaf {content} => {
-                let mut res: Vec<MBRect> = Vec::new();
+                let mut res: Vec<Point> = Vec::new();
                 for i in content {
-                    ;
+                    res.push(i);
                 }
                 Some(res)
             }
@@ -309,6 +328,28 @@ impl RTree{
         }
     }
 
+    fn traverse(&mut self, id:usize,mut res:Vec<Point>) -> Option<Vec<Point>>{
+        let tmp = self.get_node(id);
+        match tmp {
+            Node::Leaf {content } => {
+                let mut contents = content.clone();
+                contents.reverse();
+                while contents.len()!=0 {
+                    res.push(contents.pop().unwrap());
+                }
+            }
+            Node::InnerNode {content} => {
+                for i in 0..content.len() {
+                    let child = content.get(i).unwrap().children;
+                    let result = res.clone();
+                    let mut vec = self.traverse(child,result).unwrap();
+                    res.append(&mut vec);
+                }
+            }
+        }
+        return Some(res);
+    }
+
 /////////////////////////////////////////////////////////////////////////////////////////
 
     fn search_overlap_innernode(&mut self, rect: &MBRect, tmp: usize, mut overlapped: Vec<usize>) -> Option<Vec<usize>>{
@@ -323,7 +364,7 @@ impl RTree{
                         match children_node {
                             Node::Leaf { content } => { overlapped.push(i.children) }
                             Node::InnerNode { content } => {
-                                self.search_overlap_innernode(rect, i.children, overlapped.clone());
+                                overlapped.append(&mut self.search_overlap_innernode(rect, i.children, overlapped.clone()).unwrap());
                             }
                         }
                     }
@@ -353,7 +394,7 @@ impl RTree{
 
     }
 
-    fn search(&mut self, rect: &MBRect) -> Option<Vec<Point>>{
+    pub fn search(&mut self, rect: &MBRect) -> Option<Vec<Point>>{
         //生产根Block，Node和Rect
         //Erstelle Block, Node von der Wurzel
         let root_id = self.root_id;
@@ -366,13 +407,14 @@ impl RTree{
             //Node ist InnerNode
             Node::InnerNode {content} => {
                 let overlapped = self.search_overlap_innernode(rect,root_id,Vec::new()).unwrap();
-                let mut res: Vec<Point> = Vec::new();
+                let mut res_point: Vec<Point> = Vec::new();
                 for i in overlapped {
                     let point = self.search_overlap_leafnode(rect,i).unwrap();
                     for j in point {
-                        res.push(j);
+                        res_point.push(j);
                     }
                 }
+                res = Some(res_point);
             }
         }
         return res;
@@ -380,18 +422,28 @@ impl RTree{
 
 
     ////////////////////////////////////////////////////////////////////////////////
-    //insert a new node into RTree
+    pub fn insert(&mut self, insert_daten: Point) {
+        if self.bfa.reserve_count == 0 {
+            let mut node = Node::Leaf {content:Vec::new()};
+            let block = Block::to_block(&mut node);
+            self.bfa.insert(block);
+        }
+        self.r_tree_insert(insert_daten);
+    }
 
-    fn insert(&mut self, insert_daten:Point){
+    //insert a new node into RTree
+    fn r_tree_insert(&mut self, insert_daten:Point){
         let mut parent: Vec<usize> = Vec::new();
         let leaf_id = self.choose_leaf(self.root_id, &insert_daten, &mut parent).0;
         let mut id_ancestry = self.choose_leaf(self.root_id, &insert_daten, &mut parent).1;
-        let mut leaf_node = self.get_node(leaf_id);
-        let mut leaf_elem_num = leaf_node.get_innernode_content().unwrap().len();
 
         self.add_point_in_leaf(leaf_id,insert_daten);
+
+        let mut leaf_node = self.get_node(leaf_id);
+        let mut leaf_elem_num = leaf_node.get_leaf_content().unwrap().len();
+
         if leaf_elem_num <= self.M {
-            let block = Node::to_block(&leaf_node);
+            let block = Block::to_block(&mut leaf_node);
             self.bfa.update(leaf_id,block);
             self.adjust_tree(leaf_id, &mut id_ancestry, false, 0);
         }
@@ -401,10 +453,10 @@ impl RTree{
         }
     }
 
-    fn add_point_in_leaf(&mut self,leaf_id:usize,daten:Point) {
+    pub fn add_point_in_leaf(&mut self, leaf_id:usize, daten:Point) {
         let mut leaf_node = self.get_node(leaf_id);
         leaf_node.get_leaf_content().unwrap().push(daten);
-        let leaf_block = Node::to_block(&leaf_node);
+        let leaf_block = Block::to_block(&mut leaf_node);
         self.bfa.update(leaf_id,leaf_block);
     }
 
@@ -431,7 +483,7 @@ impl RTree{
 
     //Hilfsfunktion fuer insert
     //Find position for new record
-    fn choose_leaf(&mut self, tmp: usize, insert_daten:&Point, parent: &mut Vec<usize>) -> (usize, Vec<usize>) {
+    pub fn choose_leaf(&mut self, tmp: usize, insert_daten:&Point, parent: &mut Vec<usize>) -> (usize, Vec<usize>) {
         let mut tmp_node = self.get_node(tmp);
         if !self.node_is_leaf(&tmp_node) {
             let mut min_add_area = tmp_node.get_innernode_content().unwrap().get(0).unwrap().mbr.add_area(insert_daten);
@@ -458,43 +510,39 @@ impl RTree{
         }
     }
 
-/*
-    fn get_inner_element_mbr (&mut self, elem: &InnerElement) -> MBRect{
-        let mut min_bl_x: f64 = 0 as f64;
-        let mut min_bl_y: f64 = 0 as f64;
-        let mut max_tr_x: f64 = 0 as f64;
-        let mut max_tr_y: f64 = 0 as f64;
-        let mut min_bl = Point::new(min_bl_x,min_bl_y);
-        let mut max_tr = Point::new(max_tr_x,max_tr_y);
-        let mut tmp_rect = MBRect::new(min_bl,max_tr, elem.children);
-        for i in elem.mbrs {
-            tmp_rect = i.mbr_of_rects(&tmp_rect);
-        }
-        tmp_rect
-    }
-*/
-
+    //TODO
     //Hilfsfunktion fuer adjust
-    fn get_node_mbr(&mut self, node_id:usize) -> MBRect {
+    pub fn get_node_mbr(&mut self, node_id:usize) -> MBRect {
         let mut node = self.get_node(node_id);
         match node {
             Node::Leaf {content} => {
-                let mbrs = self.get_leaf_rect(node_id).unwrap();
-                let mut mbrs_clone = mbrs.clone();
-                let mut mbr = mbrs_clone.pop().unwrap();
-                while mbrs_clone.len() != 1 {
-                    mbr = mbr.mbr_of_rects(&mbrs_clone.pop().unwrap());
+                let mut points = content.clone();
+                if points.len() ==1 {
+                    let mbr = MBRect::new(*points.get(0).unwrap(),*points.get(0).unwrap(),node_id);
+                    return mbr
+                }else{
+                    let p1= points.pop().unwrap();
+                    let p2 =points.pop().unwrap();
+                    let mut vp= vec![p1,p2];
+                    let mut mbr = self.mbr_of_points(&mut vp,node_id);
+                    for i in points{
+                        mbr = mbr.mbr_of_point_and_rect(&i);
+                    }
+                    return mbr;
                 }
-                return mbr;
             }
             Node::InnerNode {content} => {
                 let mbrs = self.get_innernode_rect(node_id).unwrap();
                 let mut mbrs_clone = mbrs.clone();
-                let mut mbr = mbrs_clone.pop().unwrap();
-                while mbrs_clone.len() != 1 {
-                    mbr = mbr.mbr_of_rects(&mbrs_clone.pop().unwrap());
+                if mbrs_clone.len() == 1 {
+                    return *mbrs_clone.get(0).unwrap();
+                }else{
+                    let mut mbr = mbrs_clone.pop().unwrap();
+                    while mbrs_clone.len() != 1 {
+                        mbr = mbr.mbr_of_rects(&mbrs_clone.pop().unwrap());
+                    }
+                    return mbr;
                 }
-                return mbr;
             }
         }
     }
@@ -503,8 +551,8 @@ impl RTree{
     //adjusting covering rectangles
     fn adjust_tree(& mut self, id: usize, id_ancestry: &mut Vec<usize>, soll_spelt:bool, split: usize){
         let mut id_node = self.get_node(id);
-        let mut parent = id_ancestry.pop().unwrap();
-        let mut parent_node = self.get_node(parent);
+        //let mut parent = id_ancestry.pop().unwrap();
+        //let mut parent_node = self.get_node(parent);
         //check if done, stop
         if id == self.root_id{
             if !soll_spelt {}
@@ -514,18 +562,21 @@ impl RTree{
                 let ENN = InnerElement::new(self.get_node_mbr(split),split);
                 let mut new_root_node = Node::InnerNode { content: vec![EN,ENN] };
                 let new_root_id = self.bfa.reserve();
-                let mut new_root_block = Node::to_block(&new_root_node);
+                let mut new_root_block = Block::to_block(&mut new_root_node);
                 self.bfa.update(new_root_id,new_root_block);
+                self.root_id = new_root_id;
             }
         }
         else {
+            let mut parent = id_ancestry.pop().unwrap();
+            let mut parent_node = self.get_node(parent);
             if !soll_spelt {
                 for i in parent_node.get_innernode_content().unwrap() {
                     if i.children == id {
                         i.set_mbr(self.get_node_mbr(id));
                     }
                 }
-                let mut parent_block = Node::to_block(&parent_node);
+                let mut parent_block = Block::to_block(&mut parent_node);
                 self.bfa.update(parent,parent_block);
                 self.adjust_tree(parent,id_ancestry,false,0)
             }
@@ -537,7 +588,7 @@ impl RTree{
                 }
                 let new = InnerElement::new(self.get_node_mbr(split),split);
                 parent_node.get_innernode_content().unwrap().push(new);
-                let mut parent_block = Node::to_block(&parent_node);
+                let mut parent_block = Block::to_block(&mut parent_node);
                 self.bfa.update(parent,parent_block);
                 if parent_node.get_innernode_content().unwrap().len() <= self.M {
                     self.adjust_tree(parent,id_ancestry,false,0)
@@ -551,8 +602,7 @@ impl RTree{
 
     }
 
-
-    fn split(&mut self, id: usize) -> usize{
+    pub fn split(&mut self, id: usize) -> usize{
         let mut groups = self.pick_next(id);
         let group_1_index = groups.get(0).unwrap();
         let group_2_index = groups.get(1).unwrap();
@@ -566,16 +616,16 @@ impl RTree{
                 let mut group_2_node = Node::InnerNode { content: vec![] };
                 for i in group_1_index {
                     let elem = content.get(*i).unwrap();
-                    while !content_clone.get(content_clone.len()-1).unwrap().equal(elem) {
-                        content_clone.pop();
-                    }
+                    //while !content_clone.get(content_clone.len()-1).unwrap().equal(elem) {
+                    //    content_clone.pop();
+                    //}
                     group_1_node.get_innernode_content().unwrap().push(content_clone.pop().unwrap());
                 }
                 for i in group_2_index {
                     let elem = content.get(*i).unwrap();
-                    while !content_clone.get(content_clone.len()-1).unwrap().equal(elem) {
-                        content_clone.pop();
-                    }
+                    //while !content_clone.get(content_clone.len()-1).unwrap().equal(elem) {
+                    //    content_clone.pop();
+                    //}
                     group_2_node.get_innernode_content().unwrap().push(content_clone.pop().unwrap());
                 }
                 node_vec = vec![group_1_node,group_2_node];
@@ -585,32 +635,31 @@ impl RTree{
                 let mut group_1_node = Node::Leaf { content: vec![] };
                 let mut group_2_node = Node::Leaf { content: vec![] };
                 for i in group_1_index {
-                    let elem = content.get(*i).unwrap();
-                    while !content_clone.get(content_clone.len()-1).unwrap().equal(elem) {
-                        content_clone.pop();
-                    }
-                    group_1_node.get_leaf_content().unwrap().push(content_clone.pop().unwrap());
+                    let elem = *content.get(*i).unwrap();
+                    //while !content_clone.get(content_clone.len()-1).unwrap().equal(elem) {
+                    //    content_clone.pop();
+                    //}
+                    group_1_node.get_leaf_content().unwrap().push(elem);
                 }
                 for i in group_2_index {
-                    let elem = content.get(*i).unwrap();
-                    while !content_clone.get(content_clone.len()-1).unwrap().equal(elem) {
-                        content_clone.pop();
-                    }
-                    group_2_node.get_leaf_content().unwrap().push(content_clone.pop().unwrap());
+                    let elem = *content.get(*i).unwrap();
+                    //while !content_clone.get(content_clone.len()-1).unwrap().equal(elem) {
+                    //    content_clone.pop();
+                    //}
+                    group_2_node.get_leaf_content().unwrap().push(elem);
                 }
                 node_vec = vec![group_1_node,group_2_node];
             }
         }
         let node_2_id = self.bfa.reserve();
-        let block_2 = Node::to_block(node_vec.get(1).unwrap());
+        let block_2 = Block::to_block(&mut node_vec.get(1).unwrap());
         self.bfa.update(node_2_id,block_2);
-        let block_1 = Node::to_block(node_vec.get(0).unwrap());
+        let block_1 = Block::to_block(&mut node_vec.get(0).unwrap());
         self.bfa.update(id,block_1);
         //LeafNode kann als InnerElement als parentNode (InnerNode) sein
         //InnerNode kann auch als InnerElement sein
         return node_2_id;
     }
-
 
     fn area_two_rect(&mut self, rect1:&MBRect, rect2:&MBRect) -> f64 {
         let union_rect = rect1.mbr_of_rects(rect2);
@@ -621,7 +670,7 @@ impl RTree{
 
     //Hilfsfkt fuer split
     //select two entries to be the first elements of the groups
-    fn pick_seeds(&mut self, id:usize) -> Vec<usize>{
+    pub fn pick_seeds(&mut self, id:usize) -> Vec<usize>{
         let mut res:Vec<usize> = Vec::new();
         let spelt_node = self.get_node(id);
         let mut largest_d = 0 as f64;
@@ -630,8 +679,8 @@ impl RTree{
 
         match spelt_node {
             Node::InnerNode {content} => {
-                for i in 0..content.len() - 2 {
-                    for j in 1..content.len() - 1 {
+                for i in 0..content.len()-1  {
+                    for j in 1..content.len() {
                         let pick_rect_1 = &content.get(i).unwrap().mbr;
                         let pick_rect_2 = &content.get(j).unwrap().mbr;
                         let blank_area = self.area_two_rect(&pick_rect_1, &pick_rect_2) - pick_rect_1.rect_area() - pick_rect_2.rect_area();
@@ -644,8 +693,8 @@ impl RTree{
                 }
             }
             Node::Leaf {content} => {
-                for i in 0..content.len() - 2 {
-                    for j in 1..content.len() - 1 {
+                for i in 0..content.len()-1  {
+                    for j in 1..content.len()  {
                         let pick_rect_1 = *content.get(i).unwrap();
                         let pick_rect_2 = *content.get(j).unwrap();
                         let mut points = vec![pick_rect_1, pick_rect_2];
@@ -667,7 +716,7 @@ impl RTree{
 
     //Hilfsfkt fuer split
     //select remaining entries for classification in groups
-    fn pick_next(&mut self, id:usize) -> Vec<Vec<usize>>{
+    pub fn pick_next(&mut self, id:usize) -> Vec<Vec<usize>>{
         let mut res: Vec<Vec<usize>> = Vec::new();
         let spelt_node = self.get_node(id);
         let seed1 = self.pick_seeds(id)[0];
@@ -681,7 +730,7 @@ impl RTree{
                 let assigned_rect_1 = &content.get(seed1).unwrap().mbr;
                 let assigned_rect_2 = &content.get(seed2).unwrap().mbr;
 
-                for i in 0..content.len() - 1 {
+                for i in 0..content.len() {
                     let tmp_rect = &content.get(i).unwrap().mbr;
                     //seed1 kommt vor, d1 = - seed1.mbr.area, d1 < d2 erfüllt
                     //seed1 wird in assigned 1 hinzufügt
@@ -698,7 +747,7 @@ impl RTree{
                 let assigned_point_1 = *content.get(seed1).unwrap();
                 let assigned_point_2 = *content.get(seed2).unwrap();
 
-                for i in 0..content.len() - 1 {
+                for i in 0..content.len() {
                     let tmp_point = *content.get(i).unwrap();
                     let mut points1 = vec![tmp_point,assigned_point_1];
                     let mut points2 = vec![tmp_point,assigned_point_2];
@@ -726,7 +775,7 @@ impl RTree{
                 if content.len() < self.M{
                     content.push(elem);
                     let mut new_tmp = Node::InnerNode {content};
-                    let block = new_tmp.to_block();
+                    let block = Block::to_block(&mut new_tmp);
                     self.bfa.update(id,block);
                     return true;
                 }
@@ -753,6 +802,7 @@ use std::panic::resume_unwind;
 use crate::Node::{InnerNode, Leaf};
 use std::ops::BitAnd;
 use std::slice::SliceIndex;
+use std::hash::Hash;
 
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
@@ -841,6 +891,12 @@ impl Block{
         Block{contents}
     }
 
+    pub fn to_block<T> (object: &mut T) -> Self where T:serde::Serialize {
+        let obj = bincode::serialize(object).unwrap();
+        let block = Block::new(obj);
+        block
+    }
+
 }
 
 
@@ -854,7 +910,7 @@ impl BFA {
         let mut file = OpenOptions::new()
             .write(true)
             .read(true)
-            .open(path);
+            .open(&path);
 
         match file {
             //zwei faelle
@@ -883,11 +939,11 @@ impl BFA {
                     }
                 }
 
-                let reserved_file: Vec<bool> = Vec::new();
+                let reserved_file = HashMap::new();
                 let mut metadaten = HashMap::new();
-                metadaten.insert("path".to_string(),path.to_string());
-                metadaten.insert("updated".to_string(),updatepath.to_string());
-                metadaten.insert("metadaten".to_string(),metadatenpath.to_string());
+                metadaten.insert("path".to_string(),"0".to_string());
+                metadaten.insert("updated".to_string(),updatepath);
+                metadaten.insert("metadaten".to_string(),metadatenpath);
 
                 let reserve_count = update_file.len();
 
@@ -903,7 +959,7 @@ impl BFA {
                     .open(path).expect("error");
 
                 let update_file: Vec<bool> = vec![true; block_size];
-                let reserved_file: Vec<bool> = Vec::new();
+                let reserved_file = HashMap::new();
                 let mut metadaten = HashMap::new();
                 metadaten.insert("path".to_string(),path.to_string());
                 metadaten.insert("updated".to_string(),updatepath.to_string());
@@ -929,38 +985,64 @@ impl BFA {
         BFA{block_size,file,metadaten,update_file,reserved_file,reserve_count}*/
     }
 
-    pub fn get(&mut self, id:usize) -> Block{
+    pub fn get(&mut self, id:usize) -> Option<Block>{
         let mut vec:Vec<u8> = vec![0;self.block_size];
 
         if self.update_file[id] {
             let start = (id * self.block_size) as u64;
 
-            self.file.seek(SeekFrom::Start(start));
-            self.file.read(&mut vec);
-            self.file.seek(SeekFrom::Start(0));
+            self.file.seek(SeekFrom::Start(start)).expect("error bfa get");
+            self.file.read(&mut vec).expect("error bfa get");
+            self.file.seek(SeekFrom::Start(0)).expect("error bfa get");
+            let block = Block::new(vec);
+            Some(block)
         }
-        else { println!("update data not found") }
-
-        let block = Block::new(vec);
-        block
+        else { None }
     }
 
-    pub fn update(&mut self,id:usize, block: Block){
-        //nach update, ist reserved_file[id] falsch, wird nie wieder zu true gesetzt
-        //wenn man die noch benutzen will, guckt man dann im update_file nach
-        if self.reserved_file[id] || self.update_file[id]{
-            let start = (&id * self.block_size) as u64;
-            self.file.seek(SeekFrom::Start(start));
-            self.file.write(&block.contents);
-            self.file.seek(SeekFrom::Start(0));
-            self.reserved_file[id] = false;
-            self.update_file[id] =true;
+    pub fn update(&mut self, id: usize, mut block: Block) -> Result<(), Box<dyn Error>> {
+        if block.contents.len() > self.block_size {
+            return Err("Block is too large".into());
+        }
+        else {
+            let res = self.reserved_file.get(&id);
+            //fill entire block, important for the last block
+            if block.contents.len() < self.block_size {
+                for _i in block.contents.len()..self.block_size {
+                    block.contents.push(0);
+                }
+            }
+
+            match res {
+                Some(bool) => {
+                    if bool == &true {
+                        self.file.seek(SeekFrom::Start((id * self.block_size) as u64)).expect("error bfa update");
+                        self.file.write(&block.contents)?;
+                        self.update_file.insert(id,true);
+                        self.reserved_file.remove(&id);
+                    }
+                    else {
+                        return Err("id not reserved".into());
+                    }
+                }
+                None => {
+                    if self.update_file[id] {
+                        self.file.seek(SeekFrom::Start((id * self.block_size) as u64)).expect("error bfa update");
+                        self.file.write(&block.contents)?;
+                        self.reserved_file.remove(&id);
+                    }
+                    else {
+                        return Err("id not reserved".into());
+                    }
+                }
+            }
+            return Ok(())
         }
     }
 
     pub fn insert(&mut self, block:Block) -> u64{
         let id = self.reserve();
-        self.update(id,block);
+        self.update(id,block).expect("error bfa insert");
         id as u64
     }
 
@@ -994,7 +1076,7 @@ impl BFA {
 
 
     pub fn close(&mut self){
-        self.reserved_file =  Vec::new();
+        self.reserved_file =  HashMap::new();
         let mut updated_file = OpenOptions::new()
             .read(true)
             .write(true)
@@ -1035,8 +1117,8 @@ impl BFA {
     }
 
     pub fn get_root(& mut self) -> usize{
-        let mut root = self.metadaten.get("path").expect("no root");
-        let root = root.parse::<usize>().expect("invalid root");
+        let mut root_str = self.metadaten.get("path").expect("no root");
+        let root = root_str.parse::<usize>().expect("invalid root");
         return root;
     }
 }
@@ -1048,7 +1130,104 @@ mod test {
     use std::fmt::Error;
     use super::*;
 
+    #[test]
+    pub fn test_insert_without_split(){
+        let mut rtree = RTree::new(4,"test_insert_without_split()",1000);
+        let point1 = Point::new(1.0,1.0);
+        rtree.insert(point1);
+        let point2 = Point::new(2.0,2.0);
+        rtree.insert(point2);
+        let point3 = Point::new(3.0,3.0);
+        rtree.insert(point3);
+        let res:Vec<Point> = Vec::new();
+        let v = vec![point1,point2,point3];
+        let elem = rtree.traverse(0,res).unwrap();
+        assert_eq!(rtree.root_id,0);
+        assert_eq!(elem.first().unwrap().x,v.first().unwrap().x);
+        assert_eq!(elem.get(1).unwrap().x,v.get(1).unwrap().x);
+        assert_eq!(elem.last().unwrap().x,v.last().unwrap().x);
+    }
 
+    #[test]
+    pub fn test_insert_with_split(){
+        let mut rtree = RTree::new(4,"test_insert_with_split()",1000);
+        let point1 = Point::new(1.0,1.0);
+        rtree.insert(point1);
+        let point2 = Point::new(2.0,2.0);
+        rtree.insert(point2);
+        let point3 = Point::new(3.0,3.0);
+        rtree.insert(point3);
+        let point4 = Point::new(4.0,4.0);
+        rtree.insert(point4);
+        let point5 = Point::new(5.0,5.0);
+        rtree.insert(point5);
+        let res:Vec<Point> = Vec::new();
+        let v1 = vec![point1,point2,point3];
+        let v2 = vec![point4,point5];
+        assert_eq!(rtree.root_id,2);
+        for i in 0..v1.len() {
+            assert_eq!(rtree.get_node(0).get_leaf_content().unwrap().get(i).unwrap().x,v1.get(i).unwrap().x);
+            assert_eq!(rtree.get_node(0).get_leaf_content().unwrap().get(i).unwrap().y,v1.get(i).unwrap().y);
+        }
+        for i in 0..v2.len() {
+            assert_eq!(rtree.get_node(1).get_leaf_content().unwrap().get(i).unwrap().x,v2.get(i).unwrap().x);
+            assert_eq!(rtree.get_node(1).get_leaf_content().unwrap().get(i).unwrap().y,v2.get(i).unwrap().y);
+        }
+        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().children,0);
+        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(1).unwrap().children,1);
+    }
+
+    #[test]
+    pub fn test_search_without_split() {
+        let mut rtree = RTree::new(4,"test_search_without_split",1000);
+        let point1 = Point::new(1.0,1.0);
+        rtree.insert(point1);
+        let point2 = Point::new(2.0,2.0);
+        rtree.insert(point2);
+        let point3 = Point::new(3.0,3.0);
+        rtree.insert(point3);
+        let rect = MBRect::new(Point::new(0.5,0.5),Point::new(2.5,2.5),0);
+        let search = rtree.search(&rect).unwrap();
+        for i in 0..search.len() {
+            assert_eq!(search.get(i).unwrap().x,vec![point1,point2].get(i).unwrap().x);
+            assert_eq!(search.get(i).unwrap().y,vec![point1,point2].get(i).unwrap().y);
+        }
+    }
+
+    #[test]
+    pub fn test_search_with_split() {
+        let mut rtree = RTree::new(4,"test_search_with_split",1000);
+        let point1 = Point::new(1.0,1.0);
+        rtree.insert(point1);
+        let point2 = Point::new(2.0,2.0);
+        rtree.insert(point2);
+        let point3 = Point::new(3.0,3.0);
+        rtree.insert(point3);
+        let point4 = Point::new(4.0,4.0);
+        rtree.insert(point4);
+        let point5 = Point::new(5.0,5.0);
+        rtree.insert(point5);
+        let rect = MBRect::new(Point::new(0.5,0.5),Point::new(2.5,2.5),0);
+        let search = rtree.search(&rect).unwrap();
+        for i in 0..search.len() {
+            assert_eq!(search.get(i).unwrap().x,vec![point1,point2].get(i).unwrap().x);
+            assert_eq!(search.get(i).unwrap().y,vec![point1,point2].get(i).unwrap().y);
+        }
+    }
+
+    #[test]
+    pub fn test_search_none() {
+        let mut rtree = RTree::new(4,"test_search_none",1000);
+        let point1 = Point::new(1.0,1.0);
+        rtree.insert(point1);
+        let point2 = Point::new(2.0,2.0);
+        rtree.insert(point2);
+        let point3 = Point::new(3.0,3.0);
+        rtree.insert(point3);
+        let rect = MBRect::new(Point::new(1.2,1.2),Point::new(1.5,1.5),0);
+        let search = rtree.search(&rect).unwrap();
+        assert_eq!(search.len(),0);
+    }
 
     #[test]
     fn test_bfa_get_ok() -> Result<(),Error>{
@@ -1056,7 +1235,7 @@ mod test {
         let mut file = File::create("Hello.txt").expect("error");
         file.write_all(b"HelloWorld").expect("error");
         let mut bfa_1 = BFA::new(block_size,"Hello.txt");
-        let mut block = bfa_1.get(0);
+        let mut block = bfa_1.get(0).unwrap();
         assert_eq!(block.contents, [72, 101, 108, 108, 111]);
         Ok(())
     }
@@ -1067,9 +1246,10 @@ mod test {
         let mut file = File::create("Hello.txt").expect("error");
         let mut bfa_1 = BFA::new(block_size,"Hello.txt");
         file.write_all(b"HelloWorld").expect("error");
-        bfa_1.reserve();
-        bfa_1.reserve();
-        assert_eq!(bfa_1.reserved_file,[true,true]);
+        let a = bfa_1.reserve();
+        let b = bfa_1.reserve();
+        assert_eq!(*bfa_1.reserved_file.get(&a).unwrap(),true);
+        assert_eq!(*bfa_1.reserved_file.get(&b).unwrap(),true);
         Ok(())
     }
 
@@ -1079,14 +1259,10 @@ mod test {
         let mut file = File::create("Hello.txt").expect("error");
         let mut bfa_1 = BFA::new(block_size,"Hello.txt");
         bfa_1.file.write_all(b"HelloWorld").expect("error");
-        let block_1 =bfa_1.get(0);
-        bfa_1.reserve();
-        bfa_1.reserve();
+        let block_1 =bfa_1.get(0).unwrap();
         bfa_1.update(1,block_1);
 
-        let mut b = String::new();
-        bfa_1.file.read_to_string(& mut b);
-        assert_eq!(b, "HelloHello".to_string());
+        assert_eq!(bfa_1.get(1).unwrap().contents, bfa_1.get(0).unwrap().contents);
         Ok(())
     }
 
@@ -1136,8 +1312,6 @@ mod test {
         assert_eq!(s2, deserialized2);
 
     }
-
-
 
 }
 
