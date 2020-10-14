@@ -6,6 +6,7 @@ use Foprak::{Student, BFA, Point, RTree, MBRect};
 
 
 fn main() {
+
     let mut rtree = RTree::new(2,"test_insert",1000);
     let point1 = Point::new(1.0,1.0);
     rtree.insert(point1);
@@ -17,14 +18,21 @@ fn main() {
     rtree.insert(point4);
     let point5 = Point::new(5.0,5.0);
     rtree.insert(point5);
+    println!("{:?}",rtree.get_node(0).get_leaf_content().unwrap());
+    println!("{:?}",rtree.get_node(1).get_leaf_content().unwrap());
+    println!("{:?}",rtree.get_node(2).get_innernode_content().unwrap());
+    println!("{:?}",rtree.get_node(3).get_leaf_content().unwrap());
+    println!("{:?}",rtree.get_node(4).get_innernode_content().unwrap());
+    println!("{:?}",rtree.get_node(5).get_innernode_content().unwrap());
     let point6 = Point::new(6.0,6.0);
-    rtree.insert(point6);
+    //rtree.insert(point6);
     let point7 = Point::new(7.0,7.0);
-    rtree.insert(point7);
+    //rtree.insert(point7);
     //println!("{:?}",rtree.get_node(2).get_innernode_content().unwrap());
     println!("{:?}",rtree.root_id);
     //file_bfa();
     //student_block();
+
 
 
 }

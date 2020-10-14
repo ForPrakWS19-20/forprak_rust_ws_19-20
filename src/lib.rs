@@ -614,18 +614,18 @@ pub fn get_node(&mut self, id: usize) -> Node {
                 let mut group_1_node = Node::InnerNode { content: vec![] };
                 let mut group_2_node = Node::InnerNode { content: vec![] };
                 for i in group_1_index {
-                    let elem = content.get(*i).unwrap();
+                    let elem = *content.get(*i).unwrap();
                     //while !content_clone.get(content_clone.len()-1).unwrap().equal(elem) {
                     //    content_clone.pop();
                     //}
-                    group_1_node.get_innernode_content().unwrap().push(content_clone.pop().unwrap());
+                    group_1_node.get_innernode_content().unwrap().push(elem);
                 }
                 for i in group_2_index {
-                    let elem = content.get(*i).unwrap();
+                    let elem = *content.get(*i).unwrap();
                     //while !content_clone.get(content_clone.len()-1).unwrap().equal(elem) {
                     //    content_clone.pop();
                     //}
-                    group_2_node.get_innernode_content().unwrap().push(content_clone.pop().unwrap());
+                    group_2_node.get_innernode_content().unwrap().push(elem);
                 }
                 node_vec = vec![group_1_node,group_2_node];
             }
@@ -1196,17 +1196,23 @@ mod test {
         assert_eq!(rtree.root_id,5);
         assert_eq!(rtree.get_node(5).get_innernode_content().unwrap().get(0).unwrap().children,2);
         assert_eq!(rtree.get_node(5).get_innernode_content().unwrap().get(1).unwrap().children,4);
-        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().children,3);
+        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().children,0);
         assert_eq!(rtree.get_node(4).get_innernode_content().unwrap().get(0).unwrap().children,1);
-        assert_eq!(rtree.get_node(4).get_innernode_content().unwrap().get(1).unwrap().children,0);
+        assert_eq!(rtree.get_node(4).get_innernode_content().unwrap().get(1).unwrap().children,3);
 
         //Wenn Point(4,4) hinzufügt wird, ist das LeafNode mit Points(3,3),(4,4) schon voll
         //Das LeafNode besitzt parentNode Node2
-        //(5,5) hinzufügen -> split das LeafNode mit Points(3,3),(4,4),(5,5)
-        //Es ist im Code nach der Reihefolge (5,5),(4,4),(3,3)
-        //Das Node split zum Node mit Point(5,5) und Node mit Points(4,4),(3,3)
-        //Das Node mit Point(5,5) erwirbt parentNode Node2 vom alten Node
-        //Das Node mit Points(4,4),(3,3) kriegt eine neue ID 4.
+        //(5,5) hinzufügen -> split das LeafNode1 mit Points(3,3),(4,4),(5,5)
+        //Das Node1 split zum Node mit Points(3,3),(4,4) und zum Node mit Point(5,5)
+        //Das Node mit Point(5,5) kriegt eine neue ID 3
+        //Das Node mit Points(3,3),(4,4) erbt ID1 vom alten Node.
+        //Dann besitzt RootNode Node2 drei Children (Node0,1,3) -> split Node2
+        //Das Node1 split zum Node0 und Node1,3
+        //Node1 zusammen mit Node3 statt Node0 wegen der Größe vom MBR
+        //Das Node mit Child Node0 erbt ID2 vom alten Node.
+        //Das Node mit Children Node1,3 kriegt eine neue ID 4
+        //Das Node2 und 4 besitzen gleiches ParentNode Node5, eine neue ID.
+
         assert_eq!(rtree.get_node(3).get_leaf_content().unwrap().get(0).unwrap().x,5.0);
         assert_eq!(rtree.get_node(1).get_leaf_content().unwrap().get(0).unwrap().x,3.0);
         assert_eq!(rtree.get_node(1).get_leaf_content().unwrap().get(1).unwrap().x,4.0);
