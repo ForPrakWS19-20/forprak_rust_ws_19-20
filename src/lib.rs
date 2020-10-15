@@ -216,7 +216,7 @@ impl MBRect{
         let miny = miny1.max(miny2);
         let maxx = maxx1.min(maxx2);
         let maxy = maxy1.min(maxy2);
-        return (minx < maxx) && (miny < maxy);
+        return (minx <= maxx) && (miny <= maxy);
     }
 
     pub fn rect_area (&self) -> f64 {
@@ -363,7 +363,8 @@ pub fn get_node(&mut self, id: usize) -> Node {
                         match children_node {
                             Node::Leaf { content } => { overlapped.push(i.children) }
                             Node::InnerNode { content } => {
-                                overlapped.append(&mut self.search_overlap_innernode(rect, i.children, overlapped.clone()).unwrap());
+                                //overlapped.append(&mut self.search_overlap_innernode(rect, i.children, overlapped.clone()).unwrap());
+                                overlapped = self.search_overlap_innernode(rect, i.children, overlapped.clone()).unwrap();
                             }
                         }
                     }
@@ -537,8 +538,11 @@ pub fn get_node(&mut self, id: usize) -> Node {
                     return *mbrs_clone.get(0).unwrap();
                 }else{
                     let mut mbr = mbrs_clone.pop().unwrap();
-                    while mbrs_clone.len() != 1 {
-                        mbr = mbr.mbr_of_rects(&mbrs_clone.pop().unwrap());
+                    //while mbrs_clone.len() != 1 {
+                      //  mbr = mbr.mbr_of_rects(&mbrs_clone.pop().unwrap());
+                    //}
+                    for i in mbrs{
+                        mbr = mbr.mbr_of_rects(&i);
                     }
                     return mbr;
                 }
@@ -1174,7 +1178,11 @@ mod test {
             assert_eq!(rtree.get_node(1).get_leaf_content().unwrap().get(i).unwrap().y,v2.get(i).unwrap().y);
         }
         assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().children,0);
+        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().mbr.botton_left.x,1.0);
+        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().mbr.top_right.x,3.0);
         assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(1).unwrap().children,1);
+        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(1).unwrap().mbr.botton_left.x,4.0);
+        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(1).unwrap().mbr.top_right.x,5.0);
     }
 
     #[test]
@@ -1190,14 +1198,23 @@ mod test {
         rtree.insert(point4);
         let point5 = Point::new(5.0,5.0);
         rtree.insert(point5);
-        let res:Vec<Point> = Vec::new();
-        let v1 = vec![point1,point2,point3];
-        let v2 = vec![point4,point5];
         assert_eq!(rtree.root_id,5);
         assert_eq!(rtree.get_node(5).get_innernode_content().unwrap().get(0).unwrap().children,2);
+        assert_eq!(rtree.get_node(5).get_innernode_content().unwrap().get(0).unwrap().mbr.botton_left.x,1.0);
+        assert_eq!(rtree.get_node(5).get_innernode_content().unwrap().get(0).unwrap().mbr.top_right.x,2.0);
+
         assert_eq!(rtree.get_node(5).get_innernode_content().unwrap().get(1).unwrap().children,4);
+        assert_eq!(rtree.get_node(5).get_innernode_content().unwrap().get(1).unwrap().mbr.botton_left.x,3.0);
+        assert_eq!(rtree.get_node(5).get_innernode_content().unwrap().get(1).unwrap().mbr.top_right.x,5.0);
+
         assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().children,0);
+        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().mbr.botton_left.x,1.0);
+        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().mbr.top_right.x,2.0);
+
         assert_eq!(rtree.get_node(4).get_innernode_content().unwrap().get(0).unwrap().children,1);
+        assert_eq!(rtree.get_node(4).get_innernode_content().unwrap().get(0).unwrap().mbr.botton_left.x,3.0);
+        assert_eq!(rtree.get_node(4).get_innernode_content().unwrap().get(0).unwrap().mbr.top_right.x,4.0);
+
         assert_eq!(rtree.get_node(4).get_innernode_content().unwrap().get(1).unwrap().children,3);
 
         //Wenn Point(4,4) hinzufügt wird, ist das LeafNode mit Points(3,3),(4,4) schon voll
@@ -1241,8 +1258,8 @@ mod test {
     }
 
     #[test]
-    pub fn test_search_with_split() {
-        let mut rtree = RTree::new(4,"test_search_with_split",1000);
+    pub fn test_search_with_split_leaf_and_root() {
+        let mut rtree = RTree::new(4,"test_search_with_split_leaf_and_root",1000);
         let point1 = Point::new(1.0,1.0);
         rtree.insert(point1);
         let point2 = Point::new(2.0,2.0);
@@ -1258,6 +1275,35 @@ mod test {
         for i in 0..search.len() {
             assert_eq!(search.get(i).unwrap().x,vec![point1,point2].get(i).unwrap().x);
             assert_eq!(search.get(i).unwrap().y,vec![point1,point2].get(i).unwrap().y);
+        }
+    }
+
+    #[test]
+    pub fn test_search_with_split_inner() {
+        let mut rtree = RTree::new(2,"test_search_with_split_inner()",1000);
+        let point1 = Point::new(1.0,1.0);
+        rtree.insert(point1);
+        let point2 = Point::new(2.0,2.0);
+        rtree.insert(point2);
+        let point3 = Point::new(3.0,3.0);
+        rtree.insert(point3);
+        let point4 = Point::new(4.0,4.0);
+        rtree.insert(point4);
+        let point5 = Point::new(5.0,5.0);
+        rtree.insert(point5);
+
+        let rect1 = MBRect::new(Point::new(0.5,0.5),Point::new(2.5,2.5));
+        let search1 = rtree.search(&rect1).unwrap();
+        for i in 0..search1.len() {
+            assert_eq!(search1.get(i).unwrap().x,vec![point1,point2].get(i).unwrap().x);
+            assert_eq!(search1.get(i).unwrap().y,vec![point1,point2].get(i).unwrap().y);
+        }
+
+        let rect2 = MBRect::new(Point::new(3.5,3.5),Point::new(5.5,5.5));
+        let search2 = rtree.search(&rect2).unwrap();
+        for i in 0..search2.len() {
+            assert_eq!(search2.get(i).unwrap().x,vec![point4,point5].get(i).unwrap().x);
+            assert_eq!(search2.get(i).unwrap().y,vec![point4,point5].get(i).unwrap().y);
         }
     }
 

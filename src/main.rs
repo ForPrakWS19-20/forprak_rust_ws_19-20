@@ -7,7 +7,7 @@ use Foprak::{Student, BFA, Point, RTree, MBRect};
 
 fn main() {
 
-    let mut rtree = RTree::new(2,"test_insert",1000);
+    let mut rtree = RTree::new(4,"test_insert",1000);
     let point1 = Point::new(1.0,1.0);
     rtree.insert(point1);
     let point2 = Point::new(2.0,2.0);
@@ -15,21 +15,28 @@ fn main() {
     let point3 = Point::new(3.0,3.0);
     rtree.insert(point3);
     let point4 = Point::new(4.0,4.0);
-    rtree.insert(point4);
+    //rtree.insert(point4);
     let point5 = Point::new(5.0,5.0);
-    rtree.insert(point5);
+    //rtree.insert(point5);
+    /*
     println!("{:?}",rtree.get_node(0).get_leaf_content().unwrap());
     println!("{:?}",rtree.get_node(1).get_leaf_content().unwrap());
     println!("{:?}",rtree.get_node(2).get_innernode_content().unwrap());
     println!("{:?}",rtree.get_node(3).get_leaf_content().unwrap());
     println!("{:?}",rtree.get_node(4).get_innernode_content().unwrap());
     println!("{:?}",rtree.get_node(5).get_innernode_content().unwrap());
+
+
+
+    let rect1 = MBRect::new(Point::new(3.5,3.5),Point::new(10.5,10.5));
+    let search1 = rtree.search(&rect1).unwrap();
+    */
     let point6 = Point::new(6.0,6.0);
     //rtree.insert(point6);
     let point7 = Point::new(7.0,7.0);
     //rtree.insert(point7);
-    //println!("{:?}",rtree.get_node(2).get_innernode_content().unwrap());
-    println!("{:?}",rtree.root_id);
+    println!("{:?}",rtree.get_node(0).get_leaf_content().unwrap());
+    //println!("{:?}",search1);
     //file_bfa();
     //student_block();
 
