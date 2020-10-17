@@ -49,22 +49,23 @@ pub enum Node{
     },
 }
 
-#[derive(Debug, Deserialize, Serialize,Clone,Copy)]
+#[derive(Debug, Deserialize, Serialize,Clone)]
 pub struct InnerElement {
     pub mbr:MBRect,
     //ID, mit welcher Blöcke vom BFA geholt werden können
     pub children:usize
 }
 
-#[derive(Debug, Deserialize, Serialize,Clone,Copy)]
+#[derive(Debug, Deserialize, Serialize,Clone)]
 pub struct Point{
     //Pos 0: x, Pos 1: y
     //coor:Vec<f64>
-    x:f64,
-    y:f64
+    //x:f64,
+    //y:f64
+    koor:Vec<f64>
 }
 
-#[derive(Debug, Deserialize, Serialize,Clone,Copy)]
+#[derive(Debug, Deserialize, Serialize,Clone)]
 pub struct MBRect{
     botton_left:Point,
     top_right:Point,
@@ -148,12 +149,31 @@ impl LeafElement{
  */
 
 impl Point{
+    /*
     pub fn new(x:f64, y:f64) -> Self{
         Point {x,y}
     }
+     */
+    pub fn new(koor:Vec<f64>) -> Self{
+        Point {koor}
+    }
 
+    /*
     pub fn equal(&self,other:&Point) -> bool {
         return self.x == other.x && self.y == other.y
+    }
+     */
+    pub fn equal(&self,other:&Point) -> bool{
+        let mut  res = true;
+        if self.koor.len() != other.koor.len(){
+            res = false;
+        }
+        else {
+            for i in 0..self.koor.len(){
+                res = res && (self.koor.get(i).unwrap() == other.koor.get(i).unwrap());
+            }
+        }
+        return res
     }
 }
 
@@ -167,6 +187,7 @@ impl MBRect{
             self.botton_left.equal(&other.botton_left)
     }
 
+    /*
     fn mbr_of_rects(&self, another:&MBRect) -> MBRect{
         let minx1 = self.botton_left.x;
         let miny1 = self.botton_left.y;
@@ -185,7 +206,30 @@ impl MBRect{
         let rect: MBRect = MBRect::new(min,max);
         rect
     }
+     */
 
+    fn mbr_of_rects(&self, another:&MBRect) -> MBRect{
+        let minp1 = self.botton_left.clone();
+        let minkoor1 = minp1.koor;
+        let maxp1 = self.top_right.clone();
+        let maxkoor1 = maxp1.koor;
+        let minp2 = another.botton_left.clone();
+        let minkoor2 = minp2.koor;
+        let maxp2 = another.top_right.clone();
+        let maxkoor2 = maxp2.koor;
+        let mut minkoor:Vec<f64> = Vec::new();
+        let mut maxkoor:Vec<f64> = Vec::new();
+        for i in 0..minkoor1.len(){
+            minkoor.push(minkoor1.get(i).unwrap().clone().min(minkoor2.get(i).unwrap().clone()));
+            maxkoor.push(maxkoor1.get(i).unwrap().clone().max(maxkoor2.get(i).unwrap().clone()));
+        }
+        let min = Point::new(minkoor);
+        let max = Point::new(maxkoor);
+        let rect:MBRect = MBRect::new(min,max);
+        rect
+    }
+
+    /*
     fn mbr_of_point_and_rect(&self, point:&Point) -> MBRect{
         let minx1 = self.botton_left.x;
         let miny1 = self.botton_left.y;
@@ -202,7 +246,28 @@ impl MBRect{
         let mbr = MBRect::new(min,max);
         return mbr;
     }
+     */
 
+    fn mbr_of_point_and_rect(&self, point:&Point) -> MBRect{
+        let minp = self.botton_left.clone();
+        let minkoor1 = minp.koor;
+        let maxp = self.top_right.clone();
+        let maxkoor1 = maxp.koor;
+        let p = point.clone();
+        let koor = p.koor;
+        let mut minkoor:Vec<f64> = Vec::new();
+        let mut maxkoor:Vec<f64> = Vec::new();
+        for i in 0..minkoor1.len(){
+            minkoor.push(minkoor1.get(i).unwrap().clone().min(koor.get(i).unwrap().clone()));
+            maxkoor.push(maxkoor1.get(i).unwrap().clone().max(koor.get(i).unwrap().clone()));
+        }
+        let min = Point::new(minkoor);
+        let max = Point::new(maxkoor);
+        let rect:MBRect = MBRect::new(min,max);
+        rect
+    }
+
+    /*
     fn overlap(&self, other: &MBRect) -> bool {
         let minx1 = self.botton_left.x;
         let miny1 = self.botton_left.y;
@@ -218,7 +283,31 @@ impl MBRect{
         let maxy = maxy1.min(maxy2);
         return (minx <= maxx) && (miny <= maxy);
     }
+     */
 
+    fn overlap(&self, other: &MBRect) -> bool {
+        let minp1 = self.botton_left.clone();
+        let minkoor1 = minp1.koor;
+        let maxp1 = self.top_right.clone();
+        let maxkoor1 = maxp1.koor;
+        let minp2 = other.botton_left.clone();
+        let minkoor2 = minp2.koor;
+        let maxp2 = other.top_right.clone();
+        let maxkoor2 = maxp2.koor;
+        let mut minkoor:Vec<f64> = Vec::new();
+        let mut maxkoor:Vec<f64> = Vec::new();
+        for i in 0..minkoor1.len(){
+            minkoor.push(minkoor1.get(i).unwrap().clone().max(minkoor2.get(i).unwrap().clone()));
+            maxkoor.push(maxkoor1.get(i).unwrap().clone().min(maxkoor2.get(i).unwrap().clone()));
+        }
+        let mut res = true;
+        for i in 0..minkoor.len(){
+            res = res && (minkoor.get(i).unwrap() <= maxkoor.get(i).unwrap());
+        }
+        res
+    }
+
+    /*
     pub fn rect_area (&self) -> f64 {
         let minx = self.botton_left.x;
         let miny = self.botton_left.y;
@@ -227,12 +316,44 @@ impl MBRect{
         let area = (maxy - miny) * (maxx - minx);
         return area;
     }
+     */
 
+    pub fn rect_area (&self) -> f64 {
+        let minp = self.botton_left.clone();
+        let minkoor = minp.koor;
+        let maxp = self.top_right.clone();
+        let maxkoor = maxp.koor;
+        let mut area = 1.0;
+        for i in 0..minkoor.len(){
+            let d = maxkoor.get(i).unwrap().clone() - minkoor.get(i).unwrap().clone();
+            area = area * d;
+        }
+        return area;
+    }
+
+    /*
     fn point_in_rect(&self, daten:&Point) -> bool {
         return daten.x <= self.top_right.x && daten.x >= self.botton_left.x &&
             daten.y <= self.top_right.y && daten.y >= self.botton_left.y;
     }
+     */
 
+    fn point_in_rect(&self, daten:&Point) -> bool {
+        let minp = self.botton_left.clone();
+        let minkoor = minp.koor;
+        let maxp = self.top_right.clone();
+        let maxkoor = maxp.koor;
+        let p = daten.clone();
+        let koor = p.koor;
+        let mut res = true;
+        for i in 0..minkoor.len(){
+            res = res && (koor.get(i).unwrap() <= maxkoor.get(i).unwrap()) &&
+                (koor.get(i).unwrap() >= minkoor.get(i).unwrap())
+        }
+        return res
+    }
+
+    /*
     fn add_area(&self, daten:&Point) -> f64 {
         let mut area = 0 as f64;
         if self.point_in_rect(daten) {}
@@ -246,13 +367,40 @@ impl MBRect{
         }
         return area;
     }
+     */
+
+    fn add_area(&self, daten:&Point) -> f64 {
+        let mut area = 0 as f64;
+        if self.point_in_rect(daten) {}
+        else {
+            let minp = self.botton_left.clone();
+            let minkoor1 = minp.koor;
+            let maxp = self.top_right.clone();
+            let maxkoor1 = maxp.koor;
+            let p = daten.clone();
+            let koor = p.koor;
+            let mut minkoor:Vec<f64> = Vec::new();
+            let mut maxkoor:Vec<f64> = Vec::new();
+            for i in 0..minkoor1.len(){
+                minkoor.push(minkoor1.get(i).unwrap().clone().min(koor.get(i).unwrap().clone()));
+                maxkoor.push(maxkoor1.get(i).unwrap().clone().max(koor.get(i).unwrap().clone()));
+            }
+            let mut new_rect_area = 1.0;
+            for i in 0..koor.len(){
+                let d = *maxkoor.get(i).unwrap() - *minkoor.get(i).unwrap();
+                new_rect_area = new_rect_area * d;
+            }
+            area = new_rect_area - self.rect_area();
+        }
+        return area;
+    }
 }
 
 
 impl RTree{
-    pub fn new(M: usize, path:&str, block_size:usize) -> Self{
+    pub fn new(M: usize, path:&str, block_size:usize, dimension:usize) -> Self{
         let bfa = BFA::new(block_size, path);
-        let dimension: usize = 2;
+        //let dimension: usize = 2;
 
         RTree{
             root_id: 0,
@@ -278,6 +426,7 @@ pub fn get_node(&mut self, id: usize) -> Node {
         return node;
     }
 
+    /*
     pub fn mbr_of_points(&mut self, points:&mut Vec<Point>, id:usize) -> MBRect{
         let mut minx = points.first().unwrap().x;
         let mut miny = points.first().unwrap().y;
@@ -291,6 +440,25 @@ pub fn get_node(&mut self, id: usize) -> Node {
         }
         let bl = Point::new(minx,miny);
         let tr = Point::new(maxx,maxy);
+        let rect = MBRect::new(bl,tr);
+        return rect;
+    }
+     */
+
+    pub fn mbr_of_points(&mut self, points:&mut Vec<Point>, id:usize) -> MBRect{
+        let mut min = points.first().unwrap().clone();
+        let mut minkoor = min.koor;
+        let mut max = points.first().unwrap().clone();
+        let mut maxkoor = max.koor;
+        for i in 0..points.len() {
+            let p = points.get(i).unwrap().clone();
+            for j in 0..minkoor.len(){
+                minkoor[j] = minkoor.get(j).unwrap().clone().min(p.koor.get(j).unwrap().clone());
+                maxkoor[j] = maxkoor.get(j).unwrap().clone().max(p.koor.get(j).unwrap().clone());
+            }
+        }
+        let bl = Point::new(minkoor);
+        let tr = Point::new(maxkoor);
         let rect = MBRect::new(bl,tr);
         return rect;
     }
@@ -433,6 +601,7 @@ pub fn get_node(&mut self, id: usize) -> Node {
 
     //insert a new node into RTree
     fn r_tree_insert(&mut self, insert_daten:Point){
+        assert_eq!(insert_daten.clone().koor.len(),self.dimension);
         let mut parent: Vec<usize> = Vec::new();
         let leaf_id = self.choose_leaf(self.root_id, &insert_daten, &mut parent).0;
         let mut id_ancestry = self.choose_leaf(self.root_id, &insert_daten, &mut parent).1;
@@ -518,7 +687,7 @@ pub fn get_node(&mut self, id: usize) -> Node {
             Node::Leaf {content} => {
                 let mut points = content.clone();
                 if points.len() ==1 {
-                    let mbr = MBRect::new(*points.get(0).unwrap(),*points.get(0).unwrap());
+                    let mbr = MBRect::new(points.get(0).unwrap().clone(),points.get(0).unwrap().clone());
                     return mbr
                 }else{
                     let p1= points.pop().unwrap();
@@ -535,7 +704,7 @@ pub fn get_node(&mut self, id: usize) -> Node {
                 let mbrs = self.get_innernode_rect(node_id).unwrap();
                 let mut mbrs_clone = mbrs.clone();
                 if mbrs_clone.len() == 1 {
-                    return *mbrs_clone.get(0).unwrap();
+                    return mbrs_clone.get(0).unwrap().clone();
                 }else{
                     let mut mbr = mbrs_clone.pop().unwrap();
                     //while mbrs_clone.len() != 1 {
@@ -618,14 +787,14 @@ pub fn get_node(&mut self, id: usize) -> Node {
                 let mut group_1_node = Node::InnerNode { content: vec![] };
                 let mut group_2_node = Node::InnerNode { content: vec![] };
                 for i in group_1_index {
-                    let elem = *content.get(*i).unwrap();
+                    let elem = content.get(*i).unwrap().clone();
                     //while !content_clone.get(content_clone.len()-1).unwrap().equal(elem) {
                     //    content_clone.pop();
                     //}
                     group_1_node.get_innernode_content().unwrap().push(elem);
                 }
                 for i in group_2_index {
-                    let elem = *content.get(*i).unwrap();
+                    let elem = content.get(*i).unwrap().clone();
                     //while !content_clone.get(content_clone.len()-1).unwrap().equal(elem) {
                     //    content_clone.pop();
                     //}
@@ -638,14 +807,14 @@ pub fn get_node(&mut self, id: usize) -> Node {
                 let mut group_1_node = Node::Leaf { content: vec![] };
                 let mut group_2_node = Node::Leaf { content: vec![] };
                 for i in group_1_index {
-                    let elem = *content.get(*i).unwrap();
+                    let elem = content.get(*i).unwrap().clone();
                     //while !content_clone.get(content_clone.len()-1).unwrap().equal(elem) {
                     //    content_clone.pop();
                     //}
                     group_1_node.get_leaf_content().unwrap().push(elem);
                 }
                 for i in group_2_index {
-                    let elem = *content.get(*i).unwrap();
+                    let elem = content.get(*i).unwrap().clone();
                     //while !content_clone.get(content_clone.len()-1).unwrap().equal(elem) {
                     //    content_clone.pop();
                     //}
@@ -698,8 +867,8 @@ pub fn get_node(&mut self, id: usize) -> Node {
             Node::Leaf {content} => {
                 for i in 0..content.len()-1  {
                     for j in 1..content.len()  {
-                        let pick_rect_1 = *content.get(i).unwrap();
-                        let pick_rect_2 = *content.get(j).unwrap();
+                        let pick_rect_1 = content.get(i).unwrap().clone();
+                        let pick_rect_2 = content.get(j).unwrap().clone();
                         let mut points = vec![pick_rect_1, pick_rect_2];
                         let d = self.mbr_of_points(&mut points, id).rect_area();
                         if d > largest_d {
@@ -747,13 +916,13 @@ pub fn get_node(&mut self, id: usize) -> Node {
                 }
             }
             Node::Leaf { content } => {
-                let assigned_point_1 = *content.get(seed1).unwrap();
-                let assigned_point_2 = *content.get(seed2).unwrap();
+                let assigned_point_1 = content.get(seed1).unwrap().clone();
+                let assigned_point_2 = content.get(seed2).unwrap().clone();
 
                 for i in 0..content.len() {
-                    let tmp_point = *content.get(i).unwrap();
-                    let mut points1 = vec![tmp_point,assigned_point_1];
-                    let mut points2 = vec![tmp_point,assigned_point_2];
+                    let tmp_point = content.get(i).unwrap().clone();
+                    let mut points1 = vec![tmp_point.clone(),assigned_point_1.clone()];
+                    let mut points2 = vec![tmp_point.clone(),assigned_point_2.clone()];
                     let d1 = self.mbr_of_points(&mut points1,id).rect_area();
                     let d2 = self.mbr_of_points(&mut points2,id).rect_area();
                     if d1 <= d2 {
@@ -1135,85 +1304,140 @@ mod test {
 
     #[test]
     pub fn test_insert_without_split(){
-        let mut rtree = RTree::new(4,"test_insert_without_split()",1000);
-        let point1 = Point::new(1.0,1.0);
-        rtree.insert(point1);
-        let point2 = Point::new(2.0,2.0);
-        rtree.insert(point2);
-        let point3 = Point::new(3.0,3.0);
-        rtree.insert(point3);
+        let mut rtree = RTree::new(4,"test_insert_without_split()",1000, 2);
+        let point1 = Point::new(vec![1.0,1.0]);
+        rtree.insert(point1.clone());
+        let point2 = Point::new(vec![2.0,2.0]);
+        rtree.insert(point2.clone());
+        let point3 = Point::new(vec![3.0,3.0]);
+        rtree.insert(point3.clone());
         let res:Vec<Point> = Vec::new();
         let v = vec![point1,point2,point3];
         let elem = rtree.traverse(0,res).unwrap();
         assert_eq!(rtree.root_id,0);
-        assert_eq!(elem.first().unwrap().x,v.first().unwrap().x);
-        assert_eq!(elem.get(1).unwrap().x,v.get(1).unwrap().x);
-        assert_eq!(elem.last().unwrap().x,v.last().unwrap().x);
+        assert_eq!(elem.first().unwrap().koor.get(0).unwrap(),v.first().unwrap().koor.get(0).unwrap());
+        assert_eq!(elem.get(1).unwrap().koor.get(0).unwrap(),v.get(1).unwrap().koor.get(0).unwrap());
+        assert_eq!(elem.last().unwrap().koor.get(0).unwrap(),v.last().unwrap().koor.get(0).unwrap());
+    }
+
+    #[test]
+    pub fn test_insert_without_split_3d(){
+        let mut rtree = RTree::new(4,"test_insert_without_split_3d()",1000, 3);
+        let point1 = Point::new(vec![1.0,1.0,1.0]);
+        rtree.insert(point1.clone());
+        let point2 = Point::new(vec![2.0,2.0,2.0]);
+        rtree.insert(point2.clone());
+        let point3 = Point::new(vec![3.0,3.0,3.0]);
+        rtree.insert(point3.clone());
+        let res:Vec<Point> = Vec::new();
+        let v = vec![point1.clone(),point2.clone(),point3.clone()];
+        let elem = rtree.traverse(0,res).unwrap();
+        assert_eq!(rtree.root_id,0);
+        assert_eq!(rtree.dimension,point1.clone().koor.len());
+        assert_eq!(elem.first().unwrap().koor.get(0).unwrap(),v.first().unwrap().koor.get(0).unwrap());
+        assert_eq!(elem.get(1).unwrap().koor.get(0).unwrap(),v.get(1).unwrap().koor.get(0).unwrap());
+        assert_eq!(elem.last().unwrap().koor.get(0).unwrap(),v.last().unwrap().koor.get(0).unwrap());
     }
 
     #[test]
     pub fn test_insert_with_split_leaf_and_root(){
-        let mut rtree = RTree::new(4,"test_insert_with_split_leaf_and_root()",1000);
-        let point1 = Point::new(1.0,1.0);
-        rtree.insert(point1);
-        let point2 = Point::new(2.0,2.0);
-        rtree.insert(point2);
-        let point3 = Point::new(3.0,3.0);
-        rtree.insert(point3);
-        let point4 = Point::new(4.0,4.0);
-        rtree.insert(point4);
-        let point5 = Point::new(5.0,5.0);
-        rtree.insert(point5);
+        let mut rtree = RTree::new(4,"test_insert_with_split_leaf_and_root()",1000,2);
+        let point1 = Point::new(vec![1.0,1.0]);
+        rtree.insert(point1.clone());
+        let point2 = Point::new(vec![2.0,2.0]);
+        rtree.insert(point2.clone());
+        let point3 = Point::new(vec![3.0,3.0]);
+        rtree.insert(point3.clone());
+        let point4 = Point::new(vec![4.0,4.0]);
+        rtree.insert(point4.clone());
+        let point5 = Point::new(vec![5.0,5.0]);
+        rtree.insert(point5.clone());
         let v1 = vec![point1,point2,point3];
         let v2 = vec![point4,point5];
         //Das RootNode N0 wird gespelt zu N0 und N1
         //Das neue RootNode ist N2
         assert_eq!(rtree.root_id,2);
         for i in 0..v1.len() {
-            assert_eq!(rtree.get_node(0).get_leaf_content().unwrap().get(i).unwrap().x,v1.get(i).unwrap().x);
-            assert_eq!(rtree.get_node(0).get_leaf_content().unwrap().get(i).unwrap().y,v1.get(i).unwrap().y);
+            assert_eq!(rtree.get_node(0).get_leaf_content().unwrap().get(i).unwrap().koor.get(0).unwrap(),v1.get(i).unwrap().koor.get(0).unwrap());
+            assert_eq!(rtree.get_node(0).get_leaf_content().unwrap().get(i).unwrap().koor.get(1).unwrap(),v1.get(i).unwrap().koor.get(1).unwrap());
         }
         for i in 0..v2.len() {
-            assert_eq!(rtree.get_node(1).get_leaf_content().unwrap().get(i).unwrap().x,v2.get(i).unwrap().x);
-            assert_eq!(rtree.get_node(1).get_leaf_content().unwrap().get(i).unwrap().y,v2.get(i).unwrap().y);
+            assert_eq!(rtree.get_node(1).get_leaf_content().unwrap().get(i).unwrap().koor.get(0).unwrap(),v2.get(i).unwrap().koor.get(0).unwrap());
+            assert_eq!(rtree.get_node(1).get_leaf_content().unwrap().get(i).unwrap().koor.get(1).unwrap(),v2.get(i).unwrap().koor.get(1).unwrap());
         }
         assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().children,0);
-        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().mbr.botton_left.x,1.0);
-        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().mbr.top_right.x,3.0);
+        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().mbr.botton_left.koor.get(0).unwrap().clone(),1.0);
+        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().mbr.top_right.koor.get(0).unwrap().clone(),3.0);
         assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(1).unwrap().children,1);
-        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(1).unwrap().mbr.botton_left.x,4.0);
-        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(1).unwrap().mbr.top_right.x,5.0);
+        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(1).unwrap().mbr.botton_left.koor.get(0).unwrap().clone(),4.0);
+        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(1).unwrap().mbr.top_right.koor.get(0).unwrap().clone(),5.0);
+    }
+
+    #[test]
+    pub fn test_insert_with_split_leaf_and_root_3d(){
+        let mut rtree = RTree::new(4,"test_insert_with_split_leaf_and_root_3d()",1000,3);
+        let point1 = Point::new(vec![1.0,1.0,1.0]);
+        rtree.insert(point1.clone());
+        let point2 = Point::new(vec![2.0,2.0,2.0]);
+        rtree.insert(point2.clone());
+        let point3 = Point::new(vec![3.0,3.0,3.0]);
+        rtree.insert(point3.clone());
+        let point4 = Point::new(vec![4.0,4.0,4.0]);
+        rtree.insert(point4.clone());
+        let point5 = Point::new(vec![5.0,5.0,5.0]);
+        rtree.insert(point5.clone());
+        let v1 = vec![point1.clone(),point2.clone(),point3.clone()];
+        let v2 = vec![point4.clone(),point5.clone()];
+        //Das RootNode N0 wird gespelt zu N0 und N1
+        //Das neue RootNode ist N2
+        assert_eq!(rtree.root_id,2);
+        for i in 0..v1.len() {
+            assert_eq!(rtree.get_node(0).get_leaf_content().unwrap().get(i).unwrap().koor.get(0).unwrap(),v1.get(i).unwrap().koor.get(0).unwrap());
+            assert_eq!(rtree.get_node(0).get_leaf_content().unwrap().get(i).unwrap().koor.get(1).unwrap(),v1.get(i).unwrap().koor.get(1).unwrap());
+            assert_eq!(rtree.get_node(0).get_leaf_content().unwrap().get(i).unwrap().koor.get(2).unwrap(),v1.get(i).unwrap().koor.get(2).unwrap());
+        }
+        for i in 0..v2.len() {
+            assert_eq!(rtree.get_node(1).get_leaf_content().unwrap().get(i).unwrap().koor.get(0).unwrap(),v2.get(i).unwrap().koor.get(0).unwrap());
+            assert_eq!(rtree.get_node(1).get_leaf_content().unwrap().get(i).unwrap().koor.get(1).unwrap(),v2.get(i).unwrap().koor.get(1).unwrap());
+            assert_eq!(rtree.get_node(1).get_leaf_content().unwrap().get(i).unwrap().koor.get(2).unwrap(),v2.get(i).unwrap().koor.get(2).unwrap());
+        }
+        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().children,0);
+        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().mbr.botton_left.koor.get(0).unwrap().clone(),1.0);
+        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().mbr.top_right.koor.get(0).unwrap().clone(),3.0);
+        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(1).unwrap().children,1);
+        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(1).unwrap().mbr.botton_left.koor.get(0).unwrap().clone(),4.0);
+        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(1).unwrap().mbr.top_right.koor.get(0).unwrap().clone(),5.0);
     }
 
     #[test]
     pub fn test_insert_with_split_inner(){
-        let mut rtree = RTree::new(2,"test_insert_with_split_inner()",1000);
-        let point1 = Point::new(1.0,1.0);
+        let mut rtree = RTree::new(2,"test_insert_with_split_inner()",1000,2);
+        let point1 = Point::new(vec![1.0,1.0]);
         rtree.insert(point1);
-        let point2 = Point::new(2.0,2.0);
+        let point2 = Point::new(vec![2.0,2.0]);
         rtree.insert(point2);
-        let point3 = Point::new(3.0,3.0);
+        let point3 = Point::new(vec![3.0,3.0]);
         rtree.insert(point3);
-        let point4 = Point::new(4.0,4.0);
+        let point4 = Point::new(vec![4.0,4.0]);
         rtree.insert(point4);
-        let point5 = Point::new(5.0,5.0);
+        let point5 = Point::new(vec![5.0,5.0]);
         rtree.insert(point5);
         assert_eq!(rtree.root_id,5);
         assert_eq!(rtree.get_node(5).get_innernode_content().unwrap().get(0).unwrap().children,2);
-        assert_eq!(rtree.get_node(5).get_innernode_content().unwrap().get(0).unwrap().mbr.botton_left.x,1.0);
-        assert_eq!(rtree.get_node(5).get_innernode_content().unwrap().get(0).unwrap().mbr.top_right.x,2.0);
+        assert_eq!(rtree.get_node(5).get_innernode_content().unwrap().get(0).unwrap().mbr.botton_left.koor.get(0).unwrap().clone(),1.0);
+        assert_eq!(rtree.get_node(5).get_innernode_content().unwrap().get(0).unwrap().mbr.top_right.koor.get(0).unwrap().clone(),2.0);
 
         assert_eq!(rtree.get_node(5).get_innernode_content().unwrap().get(1).unwrap().children,4);
-        assert_eq!(rtree.get_node(5).get_innernode_content().unwrap().get(1).unwrap().mbr.botton_left.x,3.0);
-        assert_eq!(rtree.get_node(5).get_innernode_content().unwrap().get(1).unwrap().mbr.top_right.x,5.0);
+        assert_eq!(rtree.get_node(5).get_innernode_content().unwrap().get(1).unwrap().mbr.botton_left.koor.get(0).unwrap().clone(),3.0);
+        assert_eq!(rtree.get_node(5).get_innernode_content().unwrap().get(1).unwrap().mbr.top_right.koor.get(0).unwrap().clone(),5.0);
 
         assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().children,0);
-        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().mbr.botton_left.x,1.0);
-        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().mbr.top_right.x,2.0);
+        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().mbr.botton_left.koor.get(0).unwrap().clone(),1.0);
+        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().mbr.top_right.koor.get(0).unwrap().clone(),2.0);
 
         assert_eq!(rtree.get_node(4).get_innernode_content().unwrap().get(0).unwrap().children,1);
-        assert_eq!(rtree.get_node(4).get_innernode_content().unwrap().get(0).unwrap().mbr.botton_left.x,3.0);
-        assert_eq!(rtree.get_node(4).get_innernode_content().unwrap().get(0).unwrap().mbr.top_right.x,4.0);
+        assert_eq!(rtree.get_node(4).get_innernode_content().unwrap().get(0).unwrap().mbr.botton_left.koor.get(0).unwrap().clone(),3.0);
+        assert_eq!(rtree.get_node(4).get_innernode_content().unwrap().get(0).unwrap().mbr.top_right.koor.get(0).unwrap().clone(),4.0);
 
         assert_eq!(rtree.get_node(4).get_innernode_content().unwrap().get(1).unwrap().children,3);
 
@@ -1230,93 +1454,223 @@ mod test {
         //Das Node mit Children Node1,3 kriegt eine neue ID 4
         //Das Node2 und 4 besitzen gleiches ParentNode Node5, eine neue ID.
 
-        assert_eq!(rtree.get_node(3).get_leaf_content().unwrap().get(0).unwrap().x,5.0);
-        assert_eq!(rtree.get_node(1).get_leaf_content().unwrap().get(0).unwrap().x,3.0);
-        assert_eq!(rtree.get_node(1).get_leaf_content().unwrap().get(1).unwrap().x,4.0);
-        assert_eq!(rtree.get_node(0).get_leaf_content().unwrap().get(0).unwrap().x,1.0);
-        assert_eq!(rtree.get_node(0).get_leaf_content().unwrap().get(1).unwrap().x,2.0);
+        assert_eq!(rtree.get_node(3).get_leaf_content().unwrap().get(0).unwrap().koor.get(0).unwrap().clone(),5.0);
+        assert_eq!(rtree.get_node(1).get_leaf_content().unwrap().get(0).unwrap().koor.get(0).unwrap().clone(),3.0);
+        assert_eq!(rtree.get_node(1).get_leaf_content().unwrap().get(1).unwrap().koor.get(0).unwrap().clone(),4.0);
+        assert_eq!(rtree.get_node(0).get_leaf_content().unwrap().get(0).unwrap().koor.get(0).unwrap().clone(),1.0);
+        assert_eq!(rtree.get_node(0).get_leaf_content().unwrap().get(1).unwrap().koor.get(0).unwrap().clone(),2.0);
     }
 
+    #[test]
+    pub fn test_insert_with_split_inner_3d(){
+        let mut rtree = RTree::new(2,"test_insert_with_split_inner_3d()",1000,3);
+        let point1 = Point::new(vec![1.0,1.0,1.0]);
+        rtree.insert(point1);
+        let point2 = Point::new(vec![2.0,2.0,2.0]);
+        rtree.insert(point2);
+        let point3 = Point::new(vec![3.0,3.0,3.0]);
+        rtree.insert(point3);
+        let point4 = Point::new(vec![4.0,4.0,4.0]);
+        rtree.insert(point4);
+        let point5 = Point::new(vec![5.0,5.0,5.0]);
+        rtree.insert(point5);
+        assert_eq!(rtree.root_id,5);
+        assert_eq!(rtree.get_node(5).get_innernode_content().unwrap().get(0).unwrap().children,2);
+        assert_eq!(rtree.get_node(5).get_innernode_content().unwrap().get(0).unwrap().mbr.botton_left.koor.get(0).unwrap().clone(),1.0);
+        assert_eq!(rtree.get_node(5).get_innernode_content().unwrap().get(0).unwrap().mbr.top_right.koor.get(0).unwrap().clone(),2.0);
 
+        assert_eq!(rtree.get_node(5).get_innernode_content().unwrap().get(1).unwrap().children,4);
+        assert_eq!(rtree.get_node(5).get_innernode_content().unwrap().get(1).unwrap().mbr.botton_left.koor.get(0).unwrap().clone(),3.0);
+        assert_eq!(rtree.get_node(5).get_innernode_content().unwrap().get(1).unwrap().mbr.top_right.koor.get(0).unwrap().clone(),5.0);
+
+        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().children,0);
+        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().mbr.botton_left.koor.get(0).unwrap().clone(),1.0);
+        assert_eq!(rtree.get_node(2).get_innernode_content().unwrap().get(0).unwrap().mbr.top_right.koor.get(0).unwrap().clone(),2.0);
+
+        assert_eq!(rtree.get_node(4).get_innernode_content().unwrap().get(0).unwrap().children,1);
+        assert_eq!(rtree.get_node(4).get_innernode_content().unwrap().get(0).unwrap().mbr.botton_left.koor.get(0).unwrap().clone(),3.0);
+        assert_eq!(rtree.get_node(4).get_innernode_content().unwrap().get(0).unwrap().mbr.top_right.koor.get(0).unwrap().clone(),4.0);
+
+        assert_eq!(rtree.get_node(4).get_innernode_content().unwrap().get(1).unwrap().children,3);
+
+        assert_eq!(rtree.get_node(3).get_leaf_content().unwrap().get(0).unwrap().koor.get(0).unwrap().clone(),5.0);
+        assert_eq!(rtree.get_node(1).get_leaf_content().unwrap().get(0).unwrap().koor.get(0).unwrap().clone(),3.0);
+        assert_eq!(rtree.get_node(1).get_leaf_content().unwrap().get(1).unwrap().koor.get(0).unwrap().clone(),4.0);
+        assert_eq!(rtree.get_node(0).get_leaf_content().unwrap().get(0).unwrap().koor.get(0).unwrap().clone(),1.0);
+        assert_eq!(rtree.get_node(0).get_leaf_content().unwrap().get(1).unwrap().koor.get(0).unwrap().clone(),2.0);
+    }
 
 
     #[test]
     pub fn test_search_without_split() {
-        let mut rtree = RTree::new(4,"test_search_without_split",1000);
-        let point1 = Point::new(1.0,1.0);
-        rtree.insert(point1);
-        let point2 = Point::new(2.0,2.0);
-        rtree.insert(point2);
-        let point3 = Point::new(3.0,3.0);
-        rtree.insert(point3);
-        let rect = MBRect::new(Point::new(0.5,0.5),Point::new(2.5,2.5));
+        let mut rtree = RTree::new(4,"test_search_without_split",1000,2);
+        let point1 = Point::new(vec![1.0,1.0]);
+        rtree.insert(point1.clone());
+        let point2 = Point::new(vec![2.0,2.0]);
+        rtree.insert(point2.clone());
+        let point3 = Point::new(vec![3.0,3.0]);
+        rtree.insert(point3.clone());
+        let rect = MBRect::new(Point::new(vec![0.5,0.5]),Point::new(vec![2.5,2.5]));
         let search = rtree.search(&rect).unwrap();
         for i in 0..search.len() {
-            assert_eq!(search.get(i).unwrap().x,vec![point1,point2].get(i).unwrap().x);
-            assert_eq!(search.get(i).unwrap().y,vec![point1,point2].get(i).unwrap().y);
+            let vec = vec![point1.clone(),point2.clone()];
+            assert_eq!(search.get(i).unwrap().koor.get(0).unwrap(),vec.get(i).unwrap().koor.get(0).unwrap());
+            assert_eq!(search.get(i).unwrap().koor.get(1).unwrap(),vec.get(i).unwrap().koor.get(1).unwrap());
+        }
+    }
+
+    #[test]
+    pub fn test_search_without_split_3d() {
+        let mut rtree = RTree::new(4,"test_search_without_split_3d",1000,3);
+        let point1 = Point::new(vec![1.0,1.0,1.0]);
+        rtree.insert(point1.clone());
+        let point2 = Point::new(vec![2.0,2.0,2.0]);
+        rtree.insert(point2.clone());
+        let point3 = Point::new(vec![3.0,3.0,3.0]);
+        rtree.insert(point3.clone());
+        let rect = MBRect::new(Point::new(vec![0.5,0.5,0.5]),Point::new(vec![2.5,2.5,2.5]));
+        let search = rtree.search(&rect).unwrap();
+        for i in 0..search.len() {
+            let vec = vec![point1.clone(),point2.clone()];
+            assert_eq!(search.get(i).unwrap().koor.get(0).unwrap(),vec.get(i).unwrap().koor.get(0).unwrap());
+            assert_eq!(search.get(i).unwrap().koor.get(1).unwrap(),vec.get(i).unwrap().koor.get(1).unwrap());
+            assert_eq!(search.get(i).unwrap().koor.get(2).unwrap(),vec.get(i).unwrap().koor.get(2).unwrap());
         }
     }
 
     #[test]
     pub fn test_search_with_split_leaf_and_root() {
-        let mut rtree = RTree::new(4,"test_search_with_split_leaf_and_root",1000);
-        let point1 = Point::new(1.0,1.0);
-        rtree.insert(point1);
-        let point2 = Point::new(2.0,2.0);
-        rtree.insert(point2);
-        let point3 = Point::new(3.0,3.0);
-        rtree.insert(point3);
-        let point4 = Point::new(4.0,4.0);
-        rtree.insert(point4);
-        let point5 = Point::new(5.0,5.0);
-        rtree.insert(point5);
-        let rect = MBRect::new(Point::new(0.5,0.5),Point::new(2.5,2.5));
+        let mut rtree = RTree::new(4,"test_search_with_split_leaf_and_root",1000,2);
+        let point1 = Point::new(vec![1.0,1.0]);
+        rtree.insert(point1.clone());
+        let point2 = Point::new(vec![2.0,2.0]);
+        rtree.insert(point2.clone());
+        let point3 = Point::new(vec![3.0,3.0]);
+        rtree.insert(point3.clone());
+        let point4 = Point::new(vec![4.0,4.0]);
+        rtree.insert(point4.clone());
+        let point5 = Point::new(vec![5.0,5.0]);
+        rtree.insert(point5.clone());
+        let rect = MBRect::new(Point::new(vec![0.5,0.5]),Point::new(vec![2.5,2.5]));
         let search = rtree.search(&rect).unwrap();
         for i in 0..search.len() {
-            assert_eq!(search.get(i).unwrap().x,vec![point1,point2].get(i).unwrap().x);
-            assert_eq!(search.get(i).unwrap().y,vec![point1,point2].get(i).unwrap().y);
+            let vec = vec![point1.clone(),point2.clone()];
+            assert_eq!(search.get(i).unwrap().koor.get(0).unwrap(),vec.get(i).unwrap().koor.get(0).unwrap());
+            assert_eq!(search.get(i).unwrap().koor.get(1).unwrap(),vec.get(i).unwrap().koor.get(1).unwrap());
+        }
+    }
+
+    #[test]
+    pub fn test_search_with_split_leaf_and_root_3d() {
+        let mut rtree = RTree::new(4,"test_search_with_split_leaf_and_root_3d",1000,3);
+        let point1 = Point::new(vec![1.0,1.0,1.0]);
+        rtree.insert(point1.clone());
+        let point2 = Point::new(vec![2.0,2.0,2.0]);
+        rtree.insert(point2.clone());
+        let point3 = Point::new(vec![3.0,3.0,3.0]);
+        rtree.insert(point3.clone());
+        let point4 = Point::new(vec![4.0,4.0,4.0]);
+        rtree.insert(point4.clone());
+        let point5 = Point::new(vec![5.0,5.0,5.0]);
+        rtree.insert(point5.clone());
+        let rect = MBRect::new(Point::new(vec![0.5,0.5,0.5]),Point::new(vec![2.5,2.5,2.5]));
+        let search = rtree.search(&rect).unwrap();
+        for i in 0..search.len() {
+            let vec = vec![point1.clone(),point2.clone()];
+            assert_eq!(search.get(i).unwrap().koor.get(0).unwrap(),vec.get(i).unwrap().koor.get(0).unwrap());
+            assert_eq!(search.get(i).unwrap().koor.get(1).unwrap(),vec.get(i).unwrap().koor.get(1).unwrap());
+            assert_eq!(search.get(i).unwrap().koor.get(2).unwrap(),vec.get(i).unwrap().koor.get(2).unwrap());
         }
     }
 
     #[test]
     pub fn test_search_with_split_inner() {
-        let mut rtree = RTree::new(2,"test_search_with_split_inner()",1000);
-        let point1 = Point::new(1.0,1.0);
-        rtree.insert(point1);
-        let point2 = Point::new(2.0,2.0);
-        rtree.insert(point2);
-        let point3 = Point::new(3.0,3.0);
-        rtree.insert(point3);
-        let point4 = Point::new(4.0,4.0);
-        rtree.insert(point4);
-        let point5 = Point::new(5.0,5.0);
-        rtree.insert(point5);
+        let mut rtree = RTree::new(2,"test_search_with_split_inner()",1000,2);
+        let point1 = Point::new(vec![1.0,1.0]);
+        rtree.insert(point1.clone());
+        let point2 = Point::new(vec![2.0,2.0]);
+        rtree.insert(point2.clone());
+        let point3 = Point::new(vec![3.0,3.0]);
+        rtree.insert(point3.clone());
+        let point4 = Point::new(vec![4.0,4.0]);
+        rtree.insert(point4.clone());
+        let point5 = Point::new(vec![5.0,5.0]);
+        rtree.insert(point5.clone());
 
-        let rect1 = MBRect::new(Point::new(0.5,0.5),Point::new(2.5,2.5));
+        let rect1 = MBRect::new(Point::new(vec![0.5,0.5]),Point::new(vec![2.5,2.5]));
         let search1 = rtree.search(&rect1).unwrap();
         for i in 0..search1.len() {
-            assert_eq!(search1.get(i).unwrap().x,vec![point1,point2].get(i).unwrap().x);
-            assert_eq!(search1.get(i).unwrap().y,vec![point1,point2].get(i).unwrap().y);
+            let vec1 = vec![point1.clone(),point2.clone()];
+            assert_eq!(search1.get(i).unwrap().koor.get(0).unwrap(),vec1.get(i).unwrap().koor.get(0).unwrap());
+            assert_eq!(search1.get(i).unwrap().koor.get(1).unwrap(),vec1.get(i).unwrap().koor.get(1).unwrap());
         }
 
-        let rect2 = MBRect::new(Point::new(3.5,3.5),Point::new(5.5,5.5));
+        let rect2 = MBRect::new(Point::new(vec![3.5,3.5]),Point::new(vec![5.5,5.5]));
         let search2 = rtree.search(&rect2).unwrap();
         for i in 0..search2.len() {
-            assert_eq!(search2.get(i).unwrap().x,vec![point4,point5].get(i).unwrap().x);
-            assert_eq!(search2.get(i).unwrap().y,vec![point4,point5].get(i).unwrap().y);
+            let vec2 = vec![point4.clone(),point5.clone()];
+            assert_eq!(search2.get(i).unwrap().koor.get(0).unwrap(),vec2.get(i).unwrap().koor.get(0).unwrap());
+            assert_eq!(search2.get(i).unwrap().koor.get(1).unwrap(),vec2.get(i).unwrap().koor.get(1).unwrap());
+        }
+    }
+
+    #[test]
+    pub fn test_search_with_split_inner_3d() {
+        let mut rtree = RTree::new(2,"test_search_with_split_inner_3d()",1000,3);
+        let point1 = Point::new(vec![1.0,1.0,1.0]);
+        rtree.insert(point1.clone());
+        let point2 = Point::new(vec![2.0,2.0,2.0]);
+        rtree.insert(point2.clone());
+        let point3 = Point::new(vec![3.0,3.0,3.0]);
+        rtree.insert(point3.clone());
+        let point4 = Point::new(vec![4.0,4.0,4.0]);
+        rtree.insert(point4.clone());
+        let point5 = Point::new(vec![5.0,5.0,5.0]);
+        rtree.insert(point5.clone());
+
+        let rect1 = MBRect::new(Point::new(vec![0.5,0.5,0.5]),Point::new(vec![2.5,2.5,2.5]));
+        let search1 = rtree.search(&rect1).unwrap();
+        for i in 0..search1.len() {
+            let vec1 = vec![point1.clone(),point2.clone()];
+            assert_eq!(search1.get(i).unwrap().koor.get(0).unwrap(),vec1.get(i).unwrap().koor.get(0).unwrap());
+            assert_eq!(search1.get(i).unwrap().koor.get(1).unwrap(),vec1.get(i).unwrap().koor.get(1).unwrap());
+            assert_eq!(search1.get(i).unwrap().koor.get(2).unwrap(),vec1.get(i).unwrap().koor.get(2).unwrap());
+        }
+
+        let rect2 = MBRect::new(Point::new(vec![3.5,3.5]),Point::new(vec![5.5,5.5]));
+        let search2 = rtree.search(&rect2).unwrap();
+        for i in 0..search2.len() {
+            let vec2 = vec![point4.clone(),point5.clone()];
+            assert_eq!(search2.get(i).unwrap().koor.get(0).unwrap(),vec2.get(i).unwrap().koor.get(0).unwrap());
+            assert_eq!(search2.get(i).unwrap().koor.get(1).unwrap(),vec2.get(i).unwrap().koor.get(1).unwrap());
+            assert_eq!(search2.get(i).unwrap().koor.get(2).unwrap(),vec2.get(i).unwrap().koor.get(2).unwrap());
         }
     }
 
     #[test]
     pub fn test_search_none() {
-        let mut rtree = RTree::new(4,"test_search_none",1000);
-        let point1 = Point::new(1.0,1.0);
+        let mut rtree = RTree::new(4,"test_search_none",1000,2);
+        let point1 = Point::new(vec![1.0,1.0]);
         rtree.insert(point1);
-        let point2 = Point::new(2.0,2.0);
+        let point2 = Point::new(vec![2.0,2.0]);
         rtree.insert(point2);
-        let point3 = Point::new(3.0,3.0);
+        let point3 = Point::new(vec![3.0,3.0]);
         rtree.insert(point3);
-        let rect = MBRect::new(Point::new(1.2,1.2),Point::new(1.5,1.5));
+        let rect = MBRect::new(Point::new(vec![1.2,1.2]),Point::new(vec![1.5,1.5]));
+        let search = rtree.search(&rect).unwrap();
+        assert_eq!(search.len(),0);
+    }
+
+    #[test]
+    pub fn test_search_none_3d() {
+        let mut rtree = RTree::new(4,"test_search_none_3d",1000,3);
+        let point1 = Point::new(vec![1.0,1.0,1.0]);
+        rtree.insert(point1);
+        let point2 = Point::new(vec![2.0,2.0,2.0]);
+        rtree.insert(point2);
+        let point3 = Point::new(vec![3.0,3.0,3.0]);
+        rtree.insert(point3);
+        let rect = MBRect::new(Point::new(vec![1.2,1.2,1.2]),Point::new(vec![1.5,1.5,1.5]));
         let search = rtree.search(&rect).unwrap();
         assert_eq!(search.len(),0);
     }
